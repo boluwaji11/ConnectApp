@@ -1116,6 +1116,7 @@ of money and after everything else.
 | HRT-411 | The schedule blamed the services when the church had no team | R10.3 | Resolved |
 | HRT-412 | A gift over the cap was told to enter an amount | R13.2 | Resolved |
 | HRT-413 | The platform says when Stripe has nowhere to report a gift | R13.2, R21.3 | Resolved |
+| HRT-414 | A refund made in Stripe's own dashboard never reaches the gift | R13.15, R13.9 | New |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |
@@ -4475,6 +4476,25 @@ figure it is about.
 
 The cap itself is unchanged and is worth a decision: a building campaign taking a single $50,000
 gift online would hit it.
+
+### HRT-414, a refund made outside the product is never recorded
+
+Found while proving HRT-410: a refund issued through Stripe's API against a gift the product had
+recorded left the gift showing as given in full.
+
+`markRefund` only moves a row that already carries the refund's id and is marked pending, and the
+only thing that writes those is `refundGift`, which runs when a treasurer refunds from the Giving
+screen. A refund made in Stripe's own dashboard, which is where a treasurer with a Stripe login will
+go, matches nothing. Stripe sends `refund.created` and `charge.refunded` for it and the endpoint
+subscribes to neither.
+
+It matters beyond the screen looking wrong: a giving statement is built from these rows, so a church
+would issue a tax statement overstating what somebody gave, and the deposit would not reconcile.
+
+**The decision this needs.** Whether a refund made outside the product should reduce the gift here.
+The case for yes is the statement. The case for caution is that a gift refunded in two places at
+once must not be subtracted twice, which is why matching on the refund's own id is the right key
+whichever way this goes.
 
 ### HRT-407, the domain reading was built and never wired up
 
