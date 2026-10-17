@@ -2,7 +2,7 @@ import {
   withTenant, givingTotals, givingByMonth, givingByFund,
   lapsedGivers, firstTimeGivers, canReadGivingAmounts,
 } from "@connectapp/db";
-import { t, plural } from "@connectapp/i18n";
+import { t } from "@connectapp/i18n";
 import { Screen } from "@/components/screen";
 import { requireScreen, shellData } from "@/lib/shell-data";
 import { Denied } from "@/components/denied";
@@ -100,7 +100,6 @@ export default async function GivingReport({
           <Figure
             label={t("reports.giving.total")}
             value={money(read.totals.cents)}
-            sub={plural("giving.givers.sub", read.totals.gifts)}
             hue="fern"
           />
           <Figure

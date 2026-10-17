@@ -248,7 +248,6 @@ export default async function GivingPage({
             icon={<Banknote />}
             label={t("giving.month")}
             value={money(read.thisMonth.cents)}
-            sub={plural("giving.givers.sub", read.thisMonth.gifts)}
             hue="fern"
             /* R13.2. Authorised and not yet moved by the bank, so it is in
                none of these figures and says so where they are read. */
@@ -262,7 +261,6 @@ export default async function GivingPage({
             icon={<TrendingUp />}
             label={t("giving.year")}
             value={money(read.thisYear.cents)}
-            sub={plural("giving.givers.sub", read.thisYear.gifts)}
             hue="violet"
           />
           <Figure
@@ -285,7 +283,6 @@ export default async function GivingPage({
             icon={<Repeat />}
             label={t("giving.expectedMonthly")}
             value={money(read.expected)}
-            sub={plural("giving.repeating.from", read.allRecurring)}
             hue="amber"
           />
         </Figures>

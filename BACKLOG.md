@@ -4512,8 +4512,13 @@ larger than the gift, and another church's account.
 
 The Giving board's repeating tile read "Repeating gifts, $86,666.66, 1 repeating gift", which reads
 as the total of what repeats. It is not: `recurringMonthly` brings every schedule to a month, so one
-$20,000 weekly gift is $20,000 times 52 over 12. The label says "Expected a month" now and the line
-under it says what it is from.
+$20,000 weekly gift is $20,000 times 52 over 12. The label says "Expected a month" now.
+
+The count under each figure went with it, here and on the two other screens drawing the same tile: a
+member's own giving and the giving report. "2 gifts" under $22,041.50 repeats what the list below
+already shows, and `Figure` takes `sub` as optional now, because a figure that needs no qualifying
+line should not carry one for the shape of it. The giving export keeps its count, where it is a
+column a treasurer asked for rather than decoration.
 
 ### HRT-407, the domain reading was built and never wired up
 

@@ -32,7 +32,12 @@ export function Figure({
 }: {
   label: string;
   value: string;
-  sub: string;
+  /**
+   * One line qualifying the figure, where there is one worth the room. A
+   * count of the rows behind the figure is not: "2 gifts" under $22,041.50
+   * repeats what the list below already shows.
+   */
+  sub?: string;
   hue: string;
   /**
    * A mark in the hue, where the tile is one of a row that stands for
@@ -74,7 +79,7 @@ export function Figure({
       >
         {value}
       </p>
-      <p className="mt-1 text-[13px] text-fg-muted">{sub}</p>
+      {sub ? <p className="mt-1 text-[13px] text-fg-muted">{sub}</p> : null}
       {note ? (
         <p data-numeric className="mt-1 text-[13px] text-warning-text">{note}</p>
       ) : null}

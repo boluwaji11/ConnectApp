@@ -149,7 +149,6 @@ export async function MyGiving({
             icon={<Banknote />}
             label={t("mine.giving.thisYear", { year: mine.year })}
             value={money(mine.total.cents)}
-            sub={plural("giving.givers.sub", mine.total.gifts)}
             hue="fern"
             /* R13.2. Authorised and not yet moved by the bank, so it is in
                none of these figures and says so where they are read. */
@@ -166,7 +165,6 @@ export async function MyGiving({
               value={money(
                 mine.repeating.reduce((sum, one) => sum + one.amountCents, 0),
               )}
-              sub={plural("giving.repeating.count", mine.repeating.length)}
               hue="amber"
             />
           ) : null}
