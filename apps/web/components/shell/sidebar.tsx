@@ -5,16 +5,17 @@ import Link from "next/link";
 import { NavLink } from "../nav-link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  PanelLeftClose, PanelLeftOpen, LogOut, Menu,
+  PanelLeftClose, PanelLeftOpen, Menu,
   LayoutDashboard, Users, CalendarDays, Church, Settings as Cog,
 } from "lucide-react";
-import { Avatar, Sheet, SheetContent, Tooltip, Working, cn } from "@connectapp/ui";
+import { Avatar, Sheet, SheetContent, Tooltip, cn } from "@connectapp/ui";
 import { t, type MessageKey } from "@connectapp/i18n";
 import { FlameMark } from "../brand";
 import { activeHref, type NavTarget } from "./nav-active";
-import { useSectionMemory, forgetSection, clearSectionMemory } from "./section-memory";
+import { useSectionMemory, forgetSection } from "./section-memory";
 import { setSidebarCollapsed } from "./sidebar-actions";
 import { Opening } from "../opening";
+import { SignOutButton } from "../sign-out-button";
 
 /** A nav entry with its icon already drawn, so this file holds no database. */
 export interface ShellEntry extends NavTarget {
@@ -100,7 +101,6 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = React.useState(initial);
-  const [going, setGoing] = React.useState(false);
   const reopen = useSectionMemory(entries);
   const forget = forgetSection;
 
@@ -384,26 +384,16 @@ export function Sidebar({
             </Link>
           </Tooltip>
 
-          {/* R24.6. Signing out forgets where every section was left, so the
-              next person at this keyboard opens People on the directory rather
-              than on a stranger's record. */}
-          <form
-            action="/auth/sign-out"
-            method="post"
-            onSubmit={() => { setGoing(true); clearSectionMemory(); }}
-          >
-            <Working open={going} label={t("common.signingOut")} />
-            <Tooltip content={t("action.signOut")} side="right">
-              <button
-                type="submit"
-                disabled={going}
-                aria-label={t("action.signOut")}
-                className="grid size-9 cursor-pointer place-items-center rounded-lg text-shell-muted hover:bg-shell-line hover:text-shell-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
-              >
-                <LogOut className="size-[18px]" aria-hidden />
-              </button>
-            </Tooltip>
-          </form>
+          {/* R24.6. The same question the rest of the shell asks. This square
+              posted straight to /auth/sign-out, one place below the avatar a
+              member aims for, so a misfire ended somebody's afternoon of data
+              entry on a shared church computer with nothing in between.
+              SignOutButton forgets where every section was left as well, so
+              the next person at this keyboard opens People on the directory
+              rather than on a stranger's record. */}
+          <Tooltip content={t("action.signOut")} side="right">
+            <SignOutButton icon />
+          </Tooltip>
         </div>
       </aside>
 

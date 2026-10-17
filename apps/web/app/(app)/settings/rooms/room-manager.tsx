@@ -16,6 +16,7 @@ import { ageLine, say } from "@/lib/room-ages";
 import { createRoom, saveRoom, archiveRoom } from "./actions";
 import { LibraryPicker } from "@/components/library-picker";
 import { roomLibrary } from "./library";
+import { usePanelGuard } from "@/components/panel-guard";
 
 
 export interface RoomItem {
@@ -283,6 +284,9 @@ export function RoomSheet({
   const [band, setBand] = React.useState<{ from?: number; to?: number; at: number }>({ at: 0 });
   /* Whether this form was reached by picking one off the list. */
   const [picked, setPicked] = React.useState(false);
+  /* R24.6. Whether anything in the form has been touched, which decides both
+     whether Save is live and whether closing asks first. */
+  const [dirty, setDirty] = React.useState(false);
 
   // The two units are read back when the form is submitted, so a unit left
   // over from the last room multiplies the next room's number: 18 typed as
@@ -296,6 +300,7 @@ export function RoomSheet({
     setToUnit(end?.unit ?? "years");
     setBand({ at: 0 });
     setPicked(false);
+    setDirty(false);
     setPicking(!room && library.length > 0);
   }, [open, room, room?.name, room?.hue, room?.forChildren, start?.unit, end?.unit, library.length]);
 
@@ -307,8 +312,14 @@ export function RoomSheet({
     return String(unit === "years" ? Math.round(value * 12) : Math.round(value));
   };
 
+  const close = (next: boolean) => {
+    setOpen(next);
+    if (!next) setDirty(false);
+  };
+  const { onOpenChange, guard } = usePanelGuard({ dirty, setOpen: close });
+
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger asChild>{trigger}</SheetTrigger>
       <SheetContent
         title={title}
@@ -335,7 +346,7 @@ export function RoomSheet({
               type="submit"
               form="room-form"
               loading={pending}
-              disabled={pending || !name.trim()}
+              disabled={pending || !name.trim() || !dirty}
             >
               {picked ? t("action.add") : t("action.save")}
             </Button>
@@ -363,6 +374,7 @@ export function RoomSheet({
                 setBand({ from: picked.from, to: picked.to, at: Date.now() });
               }
               setPicked(true);
+              setDirty(true);
               setPicking(false);
             }}
           />
@@ -382,6 +394,9 @@ export function RoomSheet({
             setOpen(false);
           }}
           noValidate
+          /* Input bubbles, so one handler on the form covers every field in
+             it rather than each one carrying its own. */
+          onInput={() => setDirty(true)}
           className="flex flex-col gap-4"
         >
           {/* R24.6. The way back to the list. Picking one is a head start,
@@ -412,7 +427,7 @@ export function RoomSheet({
 
           <label className="flex cursor-pointer items-center justify-between gap-3">
             <span className="text-label text-fg">{t("rooms.forChildren")}</span>
-            <Switch checked={forChildren} onCheckedChange={setForChildren} />
+            <Switch checked={forChildren} onCheckedChange={(on) => { setForChildren(on); setDirty(true); }} />
           </label>
 
           <div className="flex flex-col gap-1.5">
@@ -424,7 +439,7 @@ export function RoomSheet({
                   type="button"
                   aria-label={t(`hue.${option}` as never)}
                   aria-pressed={hue === option}
-                  onClick={() => setHue(option)}
+                  onClick={() => { setHue(option); setDirty(true); }}
                   className={
                     hue === option
                       ? "rounded-full p-1 ring-2 ring-primary"
@@ -483,6 +498,7 @@ export function RoomSheet({
           </Field>
         </form>
         )}
+        {guard}
       </SheetContent>
     </Sheet>
   );

@@ -1111,6 +1111,7 @@ of money and after everything else.
 | HRT-406 | The quarterly restore drill has never been run | R21.6 | New |
 | HRT-407 | HRT-283's domain reading was never wired to a screen | R22.2 | New |
 | HRT-408 | An opened slot on the schedule never went back to Open | R10.3 | Resolved |
+| HRT-409 | Every dialog and panel, opened in a browser | R24.6, R22.7, R20.1 | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |
@@ -4367,6 +4368,61 @@ first service, and the step should settle.
 **What to take from it.** A function with no callers is not the same as a capability with no
 screen. The check that would have caught it is the one that was eventually run: open the screen and
 do the thing.
+
+### HRT-409, every dialog and panel, opened in a browser
+
+Phase 4.12 of the October 2026 overhaul listed Dialogs and Panels for review in a browser, and the
+pass that was done read their wording in the catalogue instead. Forty-two overlays were opened on a
+running app, with axe run against each one while it was open. Six defects, and a wording pass across
+what the opening showed.
+
+**The form panel listed its keys to the church.** `template.connection`, `template.prayer` and four
+more, where the names should have been. `FORM_TEMPLATES` lives in `@connectapp/db`, and
+`build-client-catalogue.mjs` follows this app's own files rather than a package's, so a name read off
+the table with `t(one.name)` was never in the browser's catalogue. Every other library in the
+product keeps its labels beside the screen, which is why this was the only group affected. The names
+are written down in `new-form.tsx` now, and `client-catalogue.test.ts` reads
+`form-templates.ts` and fails if one is left out. Proved by reverting the fix: the test names the
+missing key and the file to name it in.
+
+**Every administrator read "Area.members" on the role panel.** `AREAS` in `manage-accesses/team.tsx`
+was typed `[string, string[]]` and resolved with `t(key as never)`, so `area.members`, which the
+catalogue has never held, typechecked and reached the screen. The key is `area.people`, the table is
+typed `MessageKey`, and the cast is gone.
+
+**The group panel's capacity field had no name at all.** It sat in a `Side`, which draws a span, so
+there was no `label for` and no `aria-label`: axe critical, and the one control in that section was
+nameless to a screen reader. The events panel and the rooms panel both use `Field` for the same
+number. It is a `Field` now.
+
+**fg-subtle on sunken failed AA at 4.31:1.** The pair was never audited, though `fg-subtle on canvas`
+and `on surface` both were, and sunken is where every pill and chip in the product sits. Found on the
+household member rows. The pair is in `contrast.mjs` now and light `fg-subtle` moved from L 0.540 to
+0.525, which clears all three surfaces: 4.84 on canvas, 5.41 on surface, 4.59 on sunken.
+
+**Four panels threw away unsaved work without asking.** Rooms, tags, custom fields and follow-up
+stages closed on Escape with a form typed into them. `usePanelGuard` existed and nine other panels
+used it. All four hold now, and Save waits for a change as well as for the required fields. Email
+templates had written the same question out again in its own words, "Leave without saving?" against
+the shared "You have unsaved changes", so the product asked it two ways; it uses the shared hook, and
+the shared title is the question.
+
+**Signing out from the collapsed rail asked nothing.** `SignOutButton` opens a confirmation, for the
+reason written on it: on a shared church computer this is the press that ends somebody else's
+afternoon of data entry. The rail's own square posted straight to `/auth/sign-out`, one place below
+the avatar a member aims for. `SignOutButton` takes an `icon` form and the rail uses it.
+
+**Wording.** Five controls said "Add a new X", which says new twice, and seven panel titles did not
+match the trigger that opened them. docs/ux-writing.md asks a button to lead with the verb and to use
+the fewest unambiguous words, so a trigger and its panel now say the same thing: Add a role, Add a
+fund, Add a group type, Add a service type, Add a service template, Add a stage, Write an
+announcement, Create group. The setup guide names four of those controls in its instructions, so
+those four strings moved with them and the guide was walked again on each screen.
+
+**What to take from it.** Reading the words in the catalogue is not reading the words on the screen.
+Four of the six defects are invisible in `en.ts`: the key that is never shipped to the browser, the
+key that does not exist, the field with no label, the panel that closes. The sixth, the token pair,
+was invisible in the audit that exists to catch exactly it.
 
 ### HRT-407, the domain reading was built and never wired up
 

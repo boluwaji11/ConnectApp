@@ -52,6 +52,30 @@ describe("the words the browser is given", () => {
     }
   });
 
+  /*
+   * The gap the generator cannot see.
+   *
+   * It follows this app's own files and stops at a package, so a table of
+   * labels held in `@connectapp/db` and read on a screen with `t(one.name)`
+   * reached the browser as its own key: the panel that starts a form listed
+   * "template.connection" to the church. Every other library keeps its labels
+   * beside the screen, which is why this is the only one that needs naming.
+   */
+  it("holds the form template names, which live in a package", () => {
+    /* Read rather than imported: `@connectapp/db` depends on this package, so
+       importing it back would be a cycle. */
+    const source = readFileSync(`${root}/packages/db/src/repo/form-templates.ts`, "utf8");
+    const names = [...source.matchAll(/^\s*name: "(template\.[A-Za-z0-9]+)",$/gm)].map((m) => m[1]!);
+
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      expect(
+        browserWords[name as keyof typeof browserWords],
+        `${name} is missing from the browser's catalogue, so the panel that starts a form would draw the key. Name it in apps/web/app/(app)/forms/new-form.tsx.`,
+      ).toBeTruthy();
+    }
+  });
+
   it("leaves out what only the server writes", () => {
     /* A sample of words that are only ever rendered on the server: an email's
        footer, a giving statement, the importer. If one of these turns up in

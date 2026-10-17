@@ -109,6 +109,10 @@ export function pairs() {
     // Secondary text. Captions and hints, still read, so still 4.5.
     add(`${theme}: fg-subtle on canvas`, sem(theme, "fg-subtle"), on("canvas"), 4.5);
     add(`${theme}: fg-subtle on surface`, sem(theme, "fg-subtle"), on("surface"), 4.5);
+    /* The sunken fill is where the pills and chips sit, and fg-subtle on it
+       was never audited, so the household member's role on its pill failed
+       at AA while the two pairs above passed. */
+    add(`${theme}: fg-subtle on sunken`, sem(theme, "fg-subtle"), on("sunken"), 4.5);
     /* R24.4. The rail is solid ink with its own foreground, so it is audited
        as its own pair rather than against the canvas. */
     add(`${theme}: shell-fg on shell`, sem(theme, "shell-fg"), on("shell"), 4.5);

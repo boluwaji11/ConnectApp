@@ -3,7 +3,7 @@
 import * as React from "react";
 import { LogOut } from "lucide-react";
 import {
-  Button, Dialog, DialogTrigger, DialogContent, DialogClose, DialogFooter,
+  Button, Dialog, DialogTrigger, DialogContent, DialogClose, DialogFooter, cn,
 } from "@connectapp/ui";
 import { t } from "@connectapp/i18n";
 import { clearSectionMemory } from "./shell/section-memory";
@@ -19,11 +19,17 @@ import { clearSectionMemory } from "./shell/section-memory";
 export function SignOutButton({
   label,
   compact,
+  icon,
   className,
 }: {
   label?: string;
-  compact?: boolean;
   /** Where a bar wants it smaller than a form's button. */
+  compact?: boolean;
+  /**
+   * The square in the collapsed rail, which carries the icon alone and takes
+   * its name from the tooltip beside it.
+   */
+  icon?: boolean;
   className?: string;
 }) {
   const text = label ?? t("action.signOut");
@@ -36,7 +42,20 @@ export function SignOutButton({
       <DialogTrigger asChild>
         {/* In the sidebar it is a quiet row rather than a second filled button
             under the person's own name. */}
-        {compact ? (
+        {icon ? (
+          <button
+            type="button"
+            aria-label={text}
+            className={cn(
+              "grid size-9 cursor-pointer place-items-center rounded-lg text-shell-muted",
+              "hover:bg-shell-line hover:text-shell-fg",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80",
+              className,
+            )}
+          >
+            <LogOut className="size-[18px]" aria-hidden />
+          </button>
+        ) : compact ? (
           <Button type="button" variant="ghost" className="h-9 justify-start px-2.5 text-fg-muted">
             <LogOut /> {text}
           </Button>

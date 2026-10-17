@@ -14,6 +14,7 @@ import { t } from "@connectapp/i18n";
 import { addField, saveField, removeField } from "@/app/fields/actions";
 import { Confirm } from "@/components/confirm";
 import { useFormError } from "@/lib/form-error";
+import { usePanelGuard } from "@/components/panel-guard";
 import { FIELD_LIBRARY, presetValues, type FieldPreset } from "./library";
 
 export interface FieldItem {
@@ -209,6 +210,9 @@ function FieldSheet({
   const [pending, setPending] = React.useState(false);
   /* The delete is confirmed in a box that closes first, so the bin shows it. */
   const [deleting, setDeleting] = React.useState(false);
+  /* R24.6. Whether the form has been touched, which decides both whether Save
+     is live and whether closing asks first. */
+  const [dirty, setDirty] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
@@ -220,6 +224,7 @@ function FieldSheet({
     setAll(false);
     setError(undefined);
     setConfirming(false);
+    setDirty(false);
     // The panel resets to what is stored as it opens. Depending on the record
     // itself re-runs this on every render of the screen behind it, which throws
     // away whatever has been typed into the open panel.
@@ -233,6 +238,7 @@ function FieldSheet({
     setType(values.type);
     setChoices(values.options.join("\n"));
     setPicking(false);
+    setDirty(true);
   };
 
   const held = new Set(taken.map((one) => one.trim().toLowerCase()));
@@ -257,8 +263,14 @@ function FieldSheet({
     }
   };
 
+  const close = (next: boolean) => {
+    setOpen(next);
+    if (!next) setDirty(false);
+  };
+  const { onOpenChange, guard } = usePanelGuard({ dirty, setOpen: close });
+
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger asChild>{children}</SheetTrigger>
 
       <SheetContent
@@ -326,8 +338,8 @@ function FieldSheet({
               type="submit"
               form="field-form"
               loading={pending && !deleting}
-              disabled={pending || !label.trim()}
-              aria-disabled={pending || !label.trim()}
+              disabled={pending || !label.trim() || !dirty}
+              aria-disabled={pending || !label.trim() || !dirty}
             >
               {field ? t("action.save") : t("action.add")}
             </Button>
@@ -413,6 +425,8 @@ function FieldSheet({
           id="field-form"
           action={(d) => run(field ? saveField : addField, d)}
           noValidate
+          /* Input bubbles, so one handler covers every field in the form. */
+          onInput={() => setDirty(true)}
           className="flex flex-col gap-4"
         >
           <input type="hidden" name="church" value={church} />
@@ -441,7 +455,7 @@ function FieldSheet({
           {/* R1.10. The shape can change while nothing has been answered
               against the field. The server refuses it once something has. */}
           <Field label={t("fields.type")}>
-            <Select name="type" value={type} onValueChange={setType}>
+            <Select name="type" value={type} onValueChange={(v) => { setType(v); setDirty(true); }}>
               <SelectTrigger aria-label={t("fields.type")}>
                 <SelectValue />
               </SelectTrigger>
@@ -467,13 +481,15 @@ function FieldSheet({
               name="memberEditable"
               value="1"
               checked={ownIt}
-              onCheckedChange={(on) => setOwnIt(on === true)}
+              onCheckedChange={(on) => { setOwnIt(on === true); setDirty(true); }}
             />
             <span className="text-[length:var(--d-text-body)] text-fg">
               {t("fields.memberEditable")}
             </span>
           </label>
         </form>
+
+        {guard}
       </SheetContent>
     </Sheet>
   );

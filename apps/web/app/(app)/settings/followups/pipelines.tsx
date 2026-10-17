@@ -13,6 +13,7 @@ import { t } from "@connectapp/i18n";
 import { Empty } from "@/components/empty";
 import { useAnswered } from "@/components/form-actions";
 import { LibraryPicker } from "@/components/library-picker";
+import { usePanelGuard } from "@/components/panel-guard";
 import { followupLibrary, type FlowPreset } from "./library";
 import { addPipeline, savePipeline, switchPipeline } from "./actions";
 
@@ -398,16 +399,21 @@ export function NewPipeline({
   const [picking, setPicking] = React.useState(library.length > 0);
   const full = useAnswered(formId, open && !picking);
 
+  const [dirty, setDirty] = React.useState(false);
+
   const reset = (next: boolean) => {
     setOpen(next);
     if (!next) {
       setPreset(null);
+      setDirty(false);
       setPicking(library.length > 0);
     }
   };
 
+  const { onOpenChange, guard } = usePanelGuard({ dirty, setOpen: reset });
+
   return (
-    <Sheet open={open} onOpenChange={reset}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger asChild>
         <Button><Plus /> {t("pipelines.add")}</Button>
       </SheetTrigger>
@@ -445,10 +451,13 @@ export function NewPipeline({
             guide
             formId={formId}
             onBusy={setBusy}
+            onDirty={setDirty}
             onBack={library.length > 0 ? () => setPicking(true) : undefined}
             onDone={() => reset(false)}
           />
         )}
+
+        {guard}
       </SheetContent>
     </Sheet>
   );
@@ -468,18 +477,25 @@ function EditDialog({
 }) {
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+  const [dirty, setDirty] = React.useState(false);
   const formId = React.useId();
   const full = useAnswered(formId, open);
 
+  const close = (next: boolean) => {
+    setOpen(next);
+    if (!next) setDirty(false);
+  };
+  const { onOpenChange, guard } = usePanelGuard({ dirty, setOpen: close });
+
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger asChild>{trigger}</SheetTrigger>
       <SheetContent
         title={row.name}
         closeLabel={t("common.close")}
         width="560px"
         footer={
-          <Button data-guide="pipeline-save" type="submit" form={formId} loading={busy} disabled={pending || !full}>
+          <Button data-guide="pipeline-save" type="submit" form={formId} loading={busy} disabled={pending || !full || !dirty}>
             {t("action.save")}
           </Button>
         }
@@ -492,9 +508,12 @@ function EditDialog({
             team={team}
             formId={formId}
             onBusy={setBusy}
-            onDone={() => setOpen(false)}
+            onDirty={setDirty}
+            onDone={() => close(false)}
           />
         ) : null}
+
+        {guard}
       </SheetContent>
     </Sheet>
   );
@@ -515,6 +534,7 @@ function StageForm({
   onBack,
   formId,
   onBusy,
+  onDirty,
   onDone,
 }: {
   /** The stage being changed, where there is one. */
@@ -530,6 +550,11 @@ function StageForm({
   formId: string;
   /** Told while the save is running, so the footer can go busy. */
   onBusy?: (busy: boolean) => void;
+  /**
+   * R24.6. Told once something has been typed, so the panel around this can
+   * ask before it closes on unsaved work.
+   */
+  onDirty?: (dirty: boolean) => void;
   onDone: () => void;
 }) {
   const router = useRouter();
@@ -546,9 +571,13 @@ function StageForm({
   );
   const [saving, startTransition] = React.useTransition();
   React.useEffect(() => onBusy?.(saving), [saving, onBusy]);
+  const [dirty, setDirty] = React.useState(false);
+  React.useEffect(() => onDirty?.(dirty), [dirty, onDirty]);
 
-  const change = (key: string, patch: { name?: string; days?: string }) =>
+  const change = (key: string, patch: { name?: string; days?: string }) => {
+    setDirty(true);
     setSteps((all) => all.map((step) => (step.key === key ? { ...step, ...patch } : step)));
+  };
 
   return (
     <form
@@ -566,6 +595,8 @@ function StageForm({
           }
         });
       }}
+      /* Input bubbles, so one handler covers every field in the form. */
+      onInput={() => setDirty(true)}
       className="flex flex-col gap-4"
     >
       {error ? <Banner tone="danger">{error}</Banner> : null}
@@ -610,7 +641,7 @@ function StageForm({
             ...team.map((member) => ({ value: member.userId, label: member.name })),
           ]}
           value={owner}
-          onChange={(next) => setOwner(next || NOBODY)}
+          onChange={(next) => { setOwner(next || NOBODY); setDirty(true); }}
           placeholder={t("pipelines.findOwner")}
           emptyLabel={t("pipelines.noOwner")}
           clearLabel={t("date.clear")}
@@ -668,7 +699,7 @@ function StageForm({
                   type="button"
                   variant="ghost"
                   className="-mt-2.5"
-                  onClick={() => setSteps((all) => all.filter((s) => s.key !== step.key))}
+                  onClick={() => { setDirty(true); setSteps((all) => all.filter((s) => s.key !== step.key)); }}
                 >
                   <X />
                 </IconButton>
@@ -681,12 +712,13 @@ function StageForm({
           type="button"
           variant="ghost"
           className="self-start"
-          onClick={() =>
+          onClick={() => {
+            setDirty(true);
             setSteps((all) => [
               ...all,
               { key: `new-${all.length}-${Date.now()}`, id: "", name: "", days: "" },
-            ])
-          }
+            ]);
+          }}
         >
           <Plus /> {t("pipelines.addStep")}
         </Button>

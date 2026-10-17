@@ -11,7 +11,7 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
   Thead, Tr, Th, Td,
 } from "@connectapp/ui";
-import { t } from "@connectapp/i18n";
+import { t, type MessageKey } from "@connectapp/i18n";
 import { useFormError } from "@/lib/form-error";
 import { usePanelGuard } from "@/components/panel-guard";
 import { Confirm } from "@/components/confirm";
@@ -520,8 +520,8 @@ function hueOf(role: ChurchRoleOption): string {
  * permissions listed out, because a wall of names is a wall nobody reads and
  * the question being asked is "what does this role get into".
  */
-const AREAS: Array<[string, string[]]> = [
-  ["area.members", ["members.edit", "members.archive"]],
+const AREAS: Array<[MessageKey, string[]]> = [
+  ["area.people", ["members.edit", "members.archive"]],
   ["area.notes", ["members.notes.confidential"]],
   ["area.giving", ["giving.amounts"]],
   ["area.settings", ["church.manage", "church.fields", "church.tags"]],
@@ -540,7 +540,7 @@ function summarise(role: ChurchRoleOption, everything: number): string {
 
   const held = AREAS.filter(([, permissions]) =>
     permissions.some((one) => role.permissions.includes(one)),
-  ).map(([key]) => t(key as never));
+  ).map(([key]) => t(key));
 
   if (held.length === 0) return t("roles.nothing");
   if (held.length === 1) return `${sentence(held[0]!)}.`;

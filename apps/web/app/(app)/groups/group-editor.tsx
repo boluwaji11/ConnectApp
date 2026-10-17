@@ -488,7 +488,10 @@ export function GroupEditor({
             </div>
           </Side>
 
-          <Side label={t("groups.capacity")}>
+          {/* R22.7. A Field rather than a Side: Side draws a span, which
+              labels nothing, so the only control in this section reached a
+              screen reader with no name at all. */}
+          <Field label={t("groups.capacity")}>
             <Input
               name="capacity"
               inputMode="numeric"
@@ -498,7 +501,7 @@ export function GroupEditor({
                   : String(group.capacity)
               }
             />
-          </Side>
+          </Field>
         </aside>
       </div>
     </form>

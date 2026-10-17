@@ -12,6 +12,7 @@ import { RichText } from "@/components/rich-text";
 import { DynamicFields } from "@/components/dynamic-fields";
 import { keepTemplate, putAwayTemplate } from "./actions";
 import { LibraryPicker } from "@/components/library-picker";
+import { usePanelGuard } from "@/components/panel-guard";
 import { templateLibrary, type TemplatePreset } from "./library";
 
 /** R16.4. The first words of a message, with its marks taken off. */
@@ -170,7 +171,6 @@ function TemplateSheet({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   /* R24.6. Closing a panel that has been typed in asks before it goes. */
-  const [leaving, setLeaving] = React.useState(false);
   /* The editor hands back a way to write at the caret, which the marks use. */
   const write = React.useRef<((text: string) => void) | null>(null);
 
@@ -193,7 +193,6 @@ function TemplateSheet({
     setSeed({ text: template?.body ?? "", at: Date.now() });
     setDirty(false);
     setAsking(false);
-    setLeaving(false);
     setError(null);
     setPicking(!template && library.length > 0);
   }, [open, template, library.length]);
@@ -231,19 +230,16 @@ function TemplateSheet({
     void act(() => keepTemplate(data));
   };
 
+  /* R24.6. Typed in and not saved: our own box asks, rather than the panel
+     taking the work with it. The question was written out again here in its
+     own words, so the product asked it two ways; it is the shared one now. */
+  const { onOpenChange, guard } = usePanelGuard({
+    dirty: dirty && !busy,
+    setOpen,
+  });
+
   return (
-    <Sheet
-      open={open}
-      onOpenChange={(next) => {
-        /* R24.6. Typed in and not saved: our own box asks, rather than the
-           panel taking the work with it. */
-        if (!next && dirty && !busy) {
-          setLeaving(true);
-          return;
-        }
-        setOpen(next);
-      }}
-    >
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger asChild>{children}</SheetTrigger>
       <SheetContent
         title={template ? template.name : t("mailTemplate.add")}
@@ -290,7 +286,7 @@ function TemplateSheet({
 
             <Button
               variant="secondary"
-              onClick={() => (dirty ? setLeaving(true) : setOpen(false))}
+              onClick={() => onOpenChange(false)}
             >
               {t("action.cancel")}
             </Button>
@@ -301,24 +297,7 @@ function TemplateSheet({
           )
         }
       >
-        <Dialog open={leaving} onOpenChange={setLeaving}>
-          <DialogContent alert title={t("mailTemplate.leaveTitle")}>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setLeaving(false)}>
-                {t("mailTemplate.keepWriting")}
-              </Button>
-              <Button
-                variant="danger"
-                onClick={() => {
-                  setLeaving(false);
-                  setOpen(false);
-                }}
-              >
-                {t("mailTemplate.discard")}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {guard}
 
         {picking ? (
           <LibraryPicker

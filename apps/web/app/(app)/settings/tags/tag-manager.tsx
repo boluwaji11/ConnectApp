@@ -15,6 +15,7 @@ import { useFormError } from "@/lib/form-error";
 import { LibraryPicker } from "@/components/library-picker";
 import { useAnswered } from "@/components/form-actions";
 import { tagLibrary } from "./library";
+import { usePanelGuard } from "@/components/panel-guard";
 
 export interface TagItem {
   id: string;
@@ -126,8 +127,15 @@ export function NewTag({
     }
   };
 
+  /* R24.6. The name is the whole form, so a name typed is the unsaved work
+     closing has to ask about. */
+  const { onOpenChange, guard } = usePanelGuard({
+    dirty: !picking && name.trim().length > 0,
+    setOpen: close,
+  });
+
   return (
-    <Sheet open={open} onOpenChange={close}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger asChild>
         {filled ? (
           <Button>
@@ -199,6 +207,8 @@ export function NewTag({
             </Field>
           </div>
         )}
+
+        {guard}
       </SheetContent>
     </Sheet>
   );
@@ -231,6 +241,9 @@ function EditTag({ church, tag, others }: { church: string; tag: TagItem; others
   const pending = saving || merging || deleting;
   const [confirmingDelete, setConfirmingDelete] = React.useState(false);
   const [mergeInto, setMergeInto] = React.useState<string>();
+  /* R24.6. Whether the rename or the colour has been touched, which is what
+     closing has to ask about. */
+  const [dirty, setDirty] = React.useState(false);
   const formId = React.useId();
   const full = useAnswered(formId, open);
 
@@ -260,11 +273,14 @@ function EditTag({ church, tag, others }: { church: string; tag: TagItem; others
       setConfirmingDelete(false);
       setMergeInto(undefined);
       setHue(tag.hue);
+      setDirty(false);
     }
   };
 
+  const { onOpenChange, guard } = usePanelGuard({ dirty, setOpen: reset });
+
   return (
-    <Sheet open={open} onOpenChange={reset}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger asChild>
         <button
           type="button"
@@ -278,7 +294,13 @@ function EditTag({ church, tag, others }: { church: string; tag: TagItem; others
       <SheetContent title={tag.name} closeLabel={t("common.close")}>
         {error ? <Banner tone="danger" className="mb-4">{error}</Banner> : null}
 
-        <form id={formId} action={(d) => run(startSaving, saveTag, d)} className="flex flex-col gap-4">
+        <form
+          id={formId}
+          action={(d) => run(startSaving, saveTag, d)}
+          /* Input bubbles, so one handler covers the name field. */
+          onInput={() => setDirty(true)}
+          className="flex flex-col gap-4"
+        >
           <input type="hidden" name="church" value={church} />
           <input type="hidden" name="id" value={tag.id} />
           <input type="hidden" name="hue" value={hue} />
@@ -294,7 +316,7 @@ function EditTag({ church, tag, others }: { church: string; tag: TagItem; others
                 <button
                   key={h}
                   type="button"
-                  onClick={() => setHue(h)}
+                  onClick={() => { setHue(h); setDirty(true); }}
                   aria-pressed={hue === h}
                   aria-label={h}
                   className="inline-flex size-8 items-center justify-center rounded-full border border-line-strong aria-[pressed=true]:border-fg"
@@ -311,7 +333,7 @@ function EditTag({ church, tag, others }: { church: string; tag: TagItem; others
           </fieldset>
 
           <div className="flex items-center gap-3">
-            <Button type="submit" loading={saving} disabled={pending || !full}>
+            <Button type="submit" loading={saving} disabled={pending || !full || !dirty}>
               {t("action.save")}
             </Button>
             <SheetClose asChild>
@@ -384,6 +406,8 @@ function EditTag({ church, tag, others }: { church: string; tag: TagItem; others
             </IconButton>
           </div>
         )}
+
+        {guard}
       </SheetContent>
     </Sheet>
   );
