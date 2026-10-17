@@ -54,9 +54,27 @@ openssl genrsa -out domain-connect.key 2048
 openssl rsa -in domain-connect.key -pubout -out domain-connect.pub
 ```
 
-Publish the public key as a TXT record at `_dck1.connectapp.church`, as one line with the header,
-footer and newlines removed. **Done, 13 October 2026.** It resolves, and the private half in
-`.env.local` signs a query that verifies against it. The same key goes in the production secrets at
+Publish the public key at `_dck1.connectapp.church` as **several TXT records, one per chunk**, each
+carrying the header Domain Connect reads:
+
+```
+_dck1.connectapp.church  TXT  "p=1,a=RS256,d=<first 200 characters of the base64>"
+_dck1.connectapp.church  TXT  "p=2,a=RS256,d=<the rest>"
+```
+
+Take the base64 between the PEM header and footer with the newlines removed, cut it into pieces
+small enough that `p=N,a=RS256,d=` plus the piece stays under the 255 characters a TXT string
+allows, and publish each piece as its own record, numbered from 1 in order. The pieces are
+concatenated back by whoever reads it, so they have to join to exactly the original base64.
+
+**Published 13 October 2026 as one record holding the bare base64, which is the wrong shape**, and
+Cloudflare refused to onboard the template over it on 17 October: `dc-debug-pubkey` reported "txt
+record is not split to short enough p= chunks" and "txt record token missing '='". A single 392
+character record also exceeds what one TXT string can hold, so DNS had split it at 255 into two
+quoted strings with no headers on either. The key itself is good and does not need replacing, only
+republishing in this shape.
+
+The private half in `.env.local` signs a query that verifies against it. The same key goes in the production secrets at
 deploy. Keep the private key out of the repository: it goes in the deployment's
 own secrets as `DOMAIN_CONNECT_PRIVATE_KEY`, and the record's name goes in
 `DOMAIN_CONNECT_KEY_ID` (`_dck1`).
