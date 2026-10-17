@@ -5,7 +5,7 @@
  * marked "use client" actually name. Run `pnpm catalogue` after changing a
  * screen's words; CI fails if this file is stale.
  *
- * 3910 of 5538 keys.
+ * 3914 of 5542 keys.
  */
 import type { Catalogue } from "../core";
 
@@ -1689,6 +1689,8 @@ export const browserWords: Catalogue = {
   "give.error.closed": "This church isn't taking gifts online yet.",
   "give.error.fund": "Choose what the gift is for.",
   "give.error.amount": "Enter an amount.",
+  "give.error.tooSmall": "The smallest gift this church can take online is {least}.",
+  "give.error.tooLarge": "The largest gift this church can take online is {most}. Speak to the church about giving more than that.",
   "give.error.email": "Enter an email address.",
   "give.thanks.title": "Thank you",
   "give.thanks.body": "{church} has your gift, and your receipt is on its way.",
@@ -2689,8 +2691,10 @@ export const browserWords: Catalogue = {
   "serving.dragOnto": "Drag onto a slot",
   "serving.notAvailable": "Not available some dates",
   "serving.awayThatDay": "{name} isn't available on {date}.",
-  "serving.noServices": "Nothing to fill yet",
-  "serving.noServices.body": "The schedule is built from your service times. Create a service and its positions show up here.",
+  "serving.noServices": "No services this month",
+  "serving.noServices.body": "The schedule is built from your service times. Step to another month, or create a service.",
+  "serving.noTeams": "No teams yet",
+  "serving.noTeams.body": "The schedule fills a team's positions. Add a team and its positions become the rows of this board.",
   "serving.addTeam": "Add a team",
   "serving.editTeam": "Edit the team",
   "serving.start": "Which team?",

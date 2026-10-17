@@ -1112,6 +1112,10 @@ of money and after everything else.
 | HRT-407 | HRT-283's domain reading was never wired to a screen | R22.2 | New |
 | HRT-408 | An opened slot on the schedule never went back to Open | R10.3 | Resolved |
 | HRT-409 | Every dialog and panel, opened in a browser | R24.6, R22.7, R20.1 | Resolved |
+| HRT-410 | Development's Stripe sandbox had no webhook destination | R13.2, R21.3 | Resolved |
+| HRT-411 | The schedule blamed the services when the church had no team | R10.3 | Resolved |
+| HRT-412 | A gift over the cap was told to enter an amount | R13.2 | Resolved |
+| HRT-413 | The platform says when Stripe has nowhere to report a gift | R13.2, R21.3 | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |
@@ -4423,6 +4427,54 @@ those four strings moved with them and the guide was walked again on each screen
 Four of the six defects are invisible in `en.ts`: the key that is never shipped to the browser, the
 key that does not exist, the field with no label, the panel that closes. The sixth, the token pair,
 was invisible in the audit that exists to catch exactly it.
+
+### HRT-410, development took money and recorded nothing
+
+A test gift given on development reached Stripe, showed on the Payouts screen, and never appeared in
+Giving. The Payouts screen reads Stripe live, so it was telling the truth; Giving reads our own
+records, and a gift is written there by the webhook and by nothing else.
+
+The development sandbox had **no webhook destinations at all**, so no gift given there since the
+sandbox was made was ever recorded. `/api/stripe/webhook` refuses an unsigned request, and without
+`STRIPE_WEBHOOK_SECRET` on Vercel Preview every delivery would have been refused anyway. Neither was
+set.
+
+docs/environments.md did say to make the two destinations, as a sentence at the end of
+`set-dev-stripe.sh` telling somebody to go and do it in the dashboard. A step a person has to
+remember is a step that gets skipped. `scripts/set-dev-stripe-webhooks.mjs` makes both, reads their
+signing secrets, and writes them into `.env.local` and Vercel Preview. It is idempotent, and it
+replaces a destination whose secret nobody holds, because a secret is readable only at creation and
+an endpoint that cannot be verified against rejects every delivery.
+
+This was never wrong in production, which has both secrets set.
+
+**What to take from it.** A screen that reads a third party live and a screen that reads our own
+records will disagree when the pipe between them is broken, and the one reading live looks right.
+HRT-413 is the check that now says so: the Status screen asks Stripe whether anything points at this
+environment and whether this environment holds the secret to verify it, because the Stripe probe
+beside it only ever asked whether the key worked.
+
+### HRT-411, the schedule blamed the services
+
+A church with four services and no team opened the Schedule and read "Nothing to fill yet. The
+schedule is built from your service times. Create a service", under a button that went to Services.
+It had created its services. One empty state was answering three different questions, because the
+board is drawn only when there is a team, a chosen team, and a service in the month being viewed.
+
+The screen now says which: no team sends the reader to Settings, Teams; no service in this month
+says so and keeps the month's own arrows on screen, which it did not before, so a church that
+landed on an empty month had no way to reach one that had something in it.
+
+### HRT-412, a $36,348 gift was told to enter an amount
+
+`MOST` is 2,000,000 cents, so a church takes at most $20,000 in one gift and a typo cannot create a
+$90,000 charge. Over it, under the $1 minimum, and not a whole number of cents all answered
+"Enter an amount.", so somebody who typed $36,348 was told to enter the amount they had just
+entered, with nothing to say a cap existed or what it was. Three messages now, each naming the
+figure it is about.
+
+The cap itself is unchanged and is worth a decision: a building campaign taking a single $50,000
+gift online would hit it.
 
 ### HRT-407, the domain reading was built and never wired up
 

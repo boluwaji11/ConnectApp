@@ -231,9 +231,16 @@ export default async function ServingPage({
             ? data.services.find((one) => one.slug === params.service)?.id
             : undefined
         }
+        /* R10.3. Why the board is empty, which the screen says in its own
+           words rather than sending every reader to Services. */
+        reason={
+          data.live.length === 0
+            ? "no-teams"
+            : data.services.length === 0
+              ? "no-services"
+              : null
+        }
         heading={
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-display text-[22px] leading-[28px] text-fg">
               {t("serving.schedule.title", { month })}
@@ -278,25 +285,24 @@ export default async function ServingPage({
                 </MonthStep>
             </span>
           </div>
-        </div>
-
-        {/* R10.6. What the three marks in the grid mean. */}
-        <div className="flex flex-wrap gap-3.5 text-[12px] text-fg-muted">
-          {[
-            ["accepted", "fern"],
-            ["waiting", "amber"],
-            ["declined", "rose"],
-          ].map(([what, hue]) => (
-            <span key={what} className="flex items-center gap-1.5">
-              <span
-                className="size-2.5 rounded-full"
-                style={{ background: `var(--hue-${hue}-500)` }}
-              />
-              {t(`serving.legend.${what}` as never)}
-            </span>
-          ))}
-        </div>
-      </div>
+        }
+        legend={
+          /* R10.6. What the three marks in the grid mean. */
+          <div className="flex flex-wrap gap-3.5 text-[12px] text-fg-muted">
+            {[
+              ["accepted", "fern"],
+              ["waiting", "amber"],
+              ["declined", "rose"],
+            ].map(([what, hue]) => (
+              <span key={what} className="flex items-center gap-1.5">
+                <span
+                  className="size-2.5 rounded-full"
+                  style={{ background: `var(--hue-${hue}-500)` }}
+                />
+                {t(`serving.legend.${what}` as never)}
+              </span>
+            ))}
+          </div>
         }
         schedule={
           data.chosen && data.team && data.services.length > 0

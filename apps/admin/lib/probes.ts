@@ -50,6 +50,11 @@ export const SHAPE: Shape[] = [
   { service: "redis", label: "Upstash Redis", matters: "The rate limits in front of the public forms." },
   { service: "queue", label: "The send queue", matters: "Every message a church sends to its people." },
   { service: "web", label: "The product", matters: "The site a church opens." },
+  {
+    service: "stripeWebhook",
+    label: "Stripe's webhook",
+    matters: "Whether a gift given reaches the church's records.",
+  },
 ];
 
 const words = (service: string): Shape =>
@@ -172,6 +177,53 @@ const stripe = () => {
   });
 };
 
+/**
+ * HRT-410, R13.2. Whether Stripe has anywhere to tell us a gift happened.
+ *
+ * A gift is written to our records by the webhook and by nothing else. With no
+ * destination the money still reaches the church's Stripe account and the
+ * Payouts screen still shows it, because that screen reads Stripe live, so the
+ * product looks right while its own records stay empty. Development ran that
+ * way until somebody gave money and went looking for it.
+ *
+ * Two things have to hold: Stripe has a destination pointing at this
+ * environment, and this environment holds the secret to verify its deliveries.
+ * Either one missing means every delivery is refused.
+ */
+const stripeWebhook = () => {
+  const key = process.env["STRIPE_SECRET_KEY"];
+  const host = process.env["PLATFORM_HOST"];
+  if (!key) return Promise.resolve(off("stripeWebhook", "No STRIPE_SECRET_KEY"));
+  if (!host || host === "localhost") {
+    return Promise.resolve(off("stripeWebhook", "Nothing deployed to receive one"));
+  }
+
+  return timed("stripeWebhook", async () => {
+    if (!process.env["STRIPE_WEBHOOK_SECRET"]) {
+      return { state: "fail", said: "No STRIPE_WEBHOOK_SECRET, so every delivery is refused" };
+    }
+
+    const answer = await ask("https://api.stripe.com/v1/webhook_endpoints?limit=100", {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    if (!answer.ok) {
+      /* A restricted key may be scoped away from this without being a bad key,
+         and that is not an answer to the question being asked. */
+      if (answer.status === 403) return { state: "warn", said: "Key is scoped away from the endpoints" };
+      return { state: "fail", said: `${answer.status} ${answer.statusText}` };
+    }
+
+    const said = (await answer.json()) as { data?: { url?: string; status?: string }[] };
+    const ours = (said.data ?? []).filter((one) => typeof one.url === "string" && one.url.includes(host));
+    if (ours.length === 0) {
+      return { state: "fail", said: `Nothing points at ${host}, so no gift is recorded` };
+    }
+    const live = ours.filter((one) => one.status === "enabled");
+    if (live.length === 0) return { state: "fail", said: "Its destination is disabled" };
+    return { state: "pass", said: null };
+  });
+};
+
 /** Resend, which carries the welcome, the approval and every confirmation. */
 const resend = () => {
   const key = process.env["RESEND_API_KEY"];
@@ -289,6 +341,7 @@ export async function probeEverything(): Promise<Probe[]> {
       ["redis", redis],
       ["queue", queue],
       ["web", web],
+      ["stripeWebhook", stripeWebhook],
     ] as const).map(([service, run]) =>
       /* A second over the budget each probe already works to, so a probe that
          is about to answer is not cut off by the net below it. */

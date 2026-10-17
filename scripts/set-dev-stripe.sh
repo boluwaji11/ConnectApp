@@ -56,5 +56,6 @@ printf '%s' "$secret" | vercel env add STRIPE_SECRET_KEY preview --force >/dev/n
 printf '%s' "$publishable" | vercel env add NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY preview --force >/dev/null
 echo "Set on Vercel Preview. Production was not touched."
 echo
-echo "Next: the two webhook destinations, in the sandbox's own Developers screen,"
-echo "pointed at https://dev.connectapp.church/api/stripe/webhook and /api/stripe/account."
+echo "Next: node scripts/set-dev-stripe-webhooks.mjs, which makes the two webhook"
+echo "destinations and writes their signing secrets. Without them a gift given on"
+echo "development reaches Stripe and is never recorded."

@@ -18,7 +18,9 @@ import { ScheduleGrid, type GridService, type GridTeam, type GridSlot, type Grid
  */
 export function ServingViews({
   heading,
+  legend,
   schedule,
+  reason,
   canManage,
   focus,
 }: {
@@ -31,10 +33,20 @@ export function ServingViews({
     slots: GridSlot[];
     volunteers: GridVolunteer[];
   } | null;
+  /**
+   * R10.3. Why there is no grid, which decides what the empty screen says and
+   * where it sends the reader.
+   *
+   * A board with no team drew "Create a service" at a church that had already
+   * created four, because one empty state answered three different questions.
+   */
+  reason: "no-teams" | "no-services" | null;
   /** Whether this person may change a team. */
   canManage: boolean;
-  /** The month and its legend, above the grid. */
+  /** The month and the controls that step it, above the grid. */
   heading: React.ReactNode;
+  /** What the three marks in the grid mean. Drawn only when there is a grid. */
+  legend: React.ReactNode;
   /** R10.3. The service a plan sent this reader here to fill. */
   focus?: string;
 }) {
@@ -55,21 +67,29 @@ export function ServingViews({
   };
 
   if (!schedule) {
+    const teamless = reason === "no-teams";
     return (
-      <Empty
-        icon="calendar"
-        title={t("serving.noServices")}
-        body={t("serving.noServices.body")}
-        action={
-          canManage ? (
-            <Button asChild>
-              <Link href={"/services"}>
-                <Plus /> {t("services.add")}
-              </Link>
-            </Button>
-          ) : undefined
-        }
-      />
+      /* R10.3. The month and its arrows stay. Without them a church that
+         opened a month with nothing in it had no way to reach one that had
+         something, and the screen read as the whole schedule being empty. */
+      <div className="flex flex-col gap-7">
+        {teamless ? null : heading}
+
+        <Empty
+          icon={teamless ? "members" : "calendar"}
+          title={teamless ? t("serving.noTeams") : t("serving.noServices")}
+          body={teamless ? t("serving.noTeams.body") : t("serving.noServices.body")}
+          action={
+            canManage ? (
+              <Button asChild>
+                <Link href={teamless ? "/settings/teams" : "/services"}>
+                  <Plus /> {teamless ? t("serving.addTeam") : t("services.add")}
+                </Link>
+              </Button>
+            ) : undefined
+          }
+        />
+      </div>
     );
   }
 
@@ -86,7 +106,10 @@ export function ServingViews({
         busy ? "pointer-events-none opacity-60" : ""
       }`}
     >
-      {heading}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        {heading}
+        {legend}
+      </div>
 
       <ScheduleGrid
         teams={schedule.teams}

@@ -7,6 +7,8 @@ import {
 import { stripe, stripeConfigured, asChurch, PLATFORM_FEE, withFee } from "@/lib/stripe";
 import { publicOrigin } from "@/lib/church-address";
 import { EVERY, type Repeat } from "./repeats";
+import { t } from "@connectapp/i18n";
+import { money } from "@/lib/money";
 
 export interface GiveResult {
   error?: string;
@@ -23,6 +25,20 @@ export interface GiveResult {
 /** What a church will take in one gift, so a typo cannot create a $90,000 charge. */
 const MOST = 2_000_000;
 const LEAST = 100;
+
+/**
+ * R13.2. Why the gift was refused, in words the giver can act on.
+ *
+ * All three answered "Enter an amount." before, so somebody who typed $36,348
+ * was told to enter the amount they had just entered, with nothing to say the
+ * cap existed or what it was.
+ */
+function amountTrouble(cents: number): string | null {
+  if (!Number.isInteger(cents) || cents <= 0) return t("give.error.amount");
+  if (cents < LEAST) return t("give.error.tooSmall", { least: money(LEAST) });
+  if (cents > MOST) return t("give.error.tooLarge", { most: money(MOST) });
+  return null;
+}
 
 async function origin(): Promise<string> {
   const head = await headers();
@@ -71,9 +87,10 @@ export async function startGift(input: {
   const fund = page.funds.find((one) => one.id === input.fundId);
   if (!fund) return { error: "give.error.fund" };
 
-  if (!Number.isInteger(input.amountCents) || input.amountCents < LEAST || input.amountCents > MOST) {
-    return { error: "give.error.amount" };
-  }
+  /* The sentence rather than the key, because it names the cap it is about
+     and the form resolves a bare key with no parameters. */
+  const trouble = amountTrouble(input.amountCents);
+  if (trouble) return { error: trouble };
 
   const email = input.email.trim().toLowerCase();
   if (!email.includes("@")) return { error: "give.error.email" };

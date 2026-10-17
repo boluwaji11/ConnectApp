@@ -184,8 +184,18 @@ sandboxes.
 scripts/set-dev-stripe.sh sk_test_... pk_test_...
 ```
 
-That writes both into `.env.local` and into Vercel's Preview environment. The webhook destinations
-are made the same way as production's, pointed at `https://dev.connectapp.church`.
+That writes both into `.env.local` and into Vercel's Preview environment.
+
+4. Make the two webhook destinations and write their signing secrets:
+
+```
+node scripts/set-dev-stripe-webhooks.mjs
+```
+
+A gift is recorded by the webhook and by nothing else, so a sandbox without destinations takes money
+and writes nothing down, while the Payouts screen shows it because that screen reads Stripe live.
+This step was a sentence telling somebody to go and do it in the dashboard, and it was skipped. The
+Status screen in the admin portal now says when an environment has no destination (HRT-413).
 
 ### Resend
 
