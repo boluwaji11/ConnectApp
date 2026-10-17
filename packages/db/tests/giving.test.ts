@@ -13,7 +13,7 @@ import {
 } from "../src/repo/giving";
 import { createPerson } from "../src/repo/members";
 import {
-  saveStripeAccount, getStripeAccount, markNonprofitRate,
+  saveStripeAccount, getStripeAccount, markNonprofitRate, recordOnlineGift, recordRefund,
 } from "../src/repo/stripe-accounts";
 import { InvalidInputError } from "../src/errors";
 import { PermissionError } from "../src/roles";
@@ -261,5 +261,117 @@ describe("the nonprofit rate", () => {
         markNonprofitRate(tx, { tenantId: tenant, role: "member" }, true),
       ),
     ).rejects.toBeInstanceOf(PermissionError);
+  });
+});
+
+/**
+ * HRT-414, R13.15. A refund reaches the gift wherever it was made.
+ *
+ * A treasurer with a Stripe login refunds in Stripe's dashboard, and the
+ * product never heard about it: the gift read as given in full and the
+ * year-end statement, which is built from these rows, overstated it.
+ */
+describe("a refund against an online gift", () => {
+  const ACCOUNT = `acct_refund_${SLUG}`;
+  const INTENT = "pi_refundtest";
+  const CHARGE = "ch_refundtest";
+  let giftId: string;
+
+  /** What the gift says now, read back the way a screen reads it. */
+  const giftNow = async () => {
+    const rows = await run((tx) => listGifts(tx, as(), { limit: 100, offset: 0 }));
+    return rows.find((one) => one.id === giftId)!;
+  };
+
+  beforeAll(async () => {
+    await run((tx) =>
+      saveStripeAccount(tx, as(), {
+        accountId: ACCOUNT,
+        chargesEnabled: true,
+        payoutsEnabled: true,
+        detailsSubmitted: true,
+        livemode: false,
+      }),
+    );
+    await recordOnlineGift({
+      accountId: ACCOUNT,
+      paymentIntentId: INTENT,
+      chargeId: CHARGE,
+      amountCents: 20_000,
+      feeCents: 600,
+      currency: "usd",
+      receivedOn: "2030-10-06",
+      method: "card",
+      fundId: general,
+      split: [],
+      coveredFee: false,
+      giverName: "Refund Test",
+      giverEmail: "refund@example.org",
+      recurring: false,
+      subscriptionId: null,
+    });
+    const rows = await run((tx) => listGifts(tx, as(), { limit: 100, offset: 0 }));
+    giftId = rows.find((one) => one.amountCents === 20_000 && one.feeCents === 600)!.id;
+  });
+
+  it("records a refund the product never issued", async () => {
+    expect((await giftNow()).refundedCents).toBe(0);
+
+    /* What Stripe reports after somebody refunds part of it in the dashboard:
+       the charge's own total, not a delta. */
+    await recordRefund({
+      accountId: ACCOUNT, refundId: "re_one", chargeId: CHARGE,
+      paymentIntentId: INTENT, refundedCents: 2_000, status: "settled",
+    });
+
+    const after = await giftNow();
+    expect(after.refundedCents).toBe(2_000);
+    expect(after.refundStatus).toBe("settled");
+  });
+
+  it("does not subtract twice when Stripe says the same thing again", async () => {
+    /* Stripe announces one refund as four event types and redelivers each
+       whenever it is unsure one landed. Adding a delta per delivery would
+       refund this gift eight times over. */
+    for (let again = 0; again < 4; again += 1) {
+      await recordRefund({
+        accountId: ACCOUNT, refundId: "re_one", chargeId: CHARGE,
+        paymentIntentId: INTENT, refundedCents: 2_000, status: "settled",
+      });
+    }
+    expect((await giftNow()).refundedCents).toBe(2_000);
+  });
+
+  it("follows a second refund, and one the bank later refused", async () => {
+    await recordRefund({
+      accountId: ACCOUNT, refundId: "re_two", chargeId: CHARGE,
+      paymentIntentId: INTENT, refundedCents: 5_000, status: "settled",
+    });
+    expect((await giftNow()).refundedCents).toBe(5_000);
+
+    /* A refund the bank refused takes the total back down, which is the same
+       path because the figure is Stripe's rather than one added up here. */
+    await recordRefund({
+      accountId: ACCOUNT, refundId: "re_two", chargeId: CHARGE,
+      paymentIntentId: INTENT, refundedCents: 2_000, status: "settled",
+    });
+    expect((await giftNow()).refundedCents).toBe(2_000);
+  });
+
+  it("never refunds a gift for more than it was", async () => {
+    await recordRefund({
+      accountId: ACCOUNT, refundId: "re_three", chargeId: CHARGE,
+      paymentIntentId: INTENT, refundedCents: 999_999, status: "settled",
+    });
+    expect((await giftNow()).refundedCents).toBe(20_000);
+  });
+
+  it("leaves a gift on another church's account alone", async () => {
+    await recordRefund({
+      accountId: "acct_belongs_to_nobody",
+      refundId: "re_four", chargeId: CHARGE, paymentIntentId: INTENT,
+      refundedCents: 0, status: "settled",
+    });
+    expect((await giftNow()).refundedCents).toBe(20_000);
   });
 });

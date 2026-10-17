@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import {
-  markStripeAccount, recordOnlineGift, failOnlineGift, markRefund,
+  markStripeAccount, recordOnlineGift, failOnlineGift, recordRefund,
   saveRecurring, markRecurring,
 } from "@connectapp/db";
 import { stripe, stripeConfigured, stripeLive } from "@/lib/stripe";
@@ -242,17 +242,60 @@ export async function POST(request: Request) {
        * Stripe says whether the money moved. Where the bank refused it, what
        * was taken off the gift goes back on, because it never left.
        */
+      /*
+       * R13.15, HRT-414. A refund, wherever it was made.
+       *
+       * Four types, because Stripe announces one refund in more than one way
+       * and a treasurer refunding in Stripe's own dashboard raises
+       * `refund.created` and `charge.refunded`, neither of which this
+       * endpoint listened for. The gift stayed reading as given in full and
+       * the year-end statement overstated it.
+       *
+       * The charge is read back rather than the event's own amount trusted,
+       * because `amount_refunded` is the charge's total and is the same
+       * answer however many of these arrive and in whatever order. A refund
+       * that later fails lowers it again, which is the same path.
+       */
+      case "refund.created":
       case "refund.updated":
-      case "charge.refund.updated": {
+      case "charge.refund.updated":
+      case "charge.refunded": {
         if (!account) break;
-        const refund = event.data.object as Stripe.Refund;
-        if (refund.status !== "succeeded" && refund.status !== "failed") break;
 
-        await markRefund({
+        const refund =
+          event.type === "charge.refunded"
+            ? null
+            : (event.data.object as Stripe.Refund);
+        const refunded = event.type === "charge.refunded"
+          ? (event.data.object as Stripe.Charge)
+          : null;
+
+        const chargeId =
+          refunded?.id ??
+          (typeof refund?.charge === "string" ? refund.charge : refund?.charge?.id ?? null);
+        if (!chargeId) break;
+
+        const charge = await stripe().charges.retrieve(
+          chargeId,
+          undefined,
+          { stripeAccount: account },
+        );
+
+        await recordRefund({
           accountId: account,
-          refundId: refund.id,
-          status: refund.status === "succeeded" ? "settled" : "failed",
-          amountCents: refund.amount,
+          /* The charge's own id where the event was about the charge: this
+             column holds the last refund seen, and the total beside it is
+             what a statement reads. */
+          refundId: refund?.id ?? charge.refunds?.data?.[0]?.id ?? chargeId,
+          chargeId: charge.id,
+          paymentIntentId:
+            typeof charge.payment_intent === "string"
+              ? charge.payment_intent
+              : charge.payment_intent?.id ?? null,
+          refundedCents: charge.amount_refunded ?? 0,
+          status: refund?.status === "failed" ? "failed"
+            : refund?.status === "pending" ? "pending"
+            : "settled",
         });
         break;
       }

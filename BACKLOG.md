@@ -1116,7 +1116,8 @@ of money and after everything else.
 | HRT-411 | The schedule blamed the services when the church had no team | R10.3 | Resolved |
 | HRT-412 | A gift over the cap was told to enter an amount | R13.2 | Resolved |
 | HRT-413 | The platform says when Stripe has nowhere to report a gift | R13.2, R21.3 | Resolved |
-| HRT-414 | A refund made in Stripe's own dashboard never reaches the gift | R13.15, R13.9 | New |
+| HRT-414 | A refund made in Stripe's own dashboard never reaches the gift | R13.15, R13.9 | Resolved |
+| HRT-415 | The repeating gifts tile did not say the figure was a month | R13.3 | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |
@@ -4474,8 +4475,11 @@ $90,000 charge. Over it, under the $1 minimum, and not a whole number of cents a
 entered, with nothing to say a cap existed or what it was. Three messages now, each naming the
 figure it is about.
 
-The cap itself is unchanged and is worth a decision: a building campaign taking a single $50,000
-gift online would hit it.
+**The cap was then raised to $100,000**, on 17 October. It was $20,000, which nothing in the PRD
+asked for: it arrived with the giving page on 7 October justified only by an inline comment about a
+typo creating a $90,000 charge. A guard against a typo is worth keeping; $20,000 was low enough to
+refuse gifts churches receive, and a building campaign gift or a bequest is the transaction a church
+least wants bounced.
 
 ### HRT-414, a refund made outside the product is never recorded
 
@@ -4491,10 +4495,25 @@ subscribes to neither.
 It matters beyond the screen looking wrong: a giving statement is built from these rows, so a church
 would issue a tax statement overstating what somebody gave, and the deposit would not reconcile.
 
-**The decision this needs.** Whether a refund made outside the product should reduce the gift here.
-The case for yes is the statement. The case for caution is that a gift refunded in two places at
-once must not be subtracted twice, which is why matching on the refund's own id is the right key
-whichever way this goes.
+**Decided on 17 October: yes, it reduces the gift**, because the statement has to be right.
+
+The care it needed was not double-subtracting, and the answer is to stop adding up at all. The
+endpoint now reads the charge back and writes `refunded_cents` to the charge's own `amount_refunded`,
+which is the total rather than a delta. That is the same answer however many of the four event types
+arrive, in whatever order, however often Stripe redelivers, and it falls back on its own when a
+refund fails. `refund.created` and `charge.refunded` are subscribed to as well, which is what a
+dashboard refund actually raises.
+
+Five tests in `giving.test.ts` hold it: a refund the product never issued, four deliveries of one
+refund leaving the total at one refund, a second refund followed by one the bank refused, a figure
+larger than the gift, and another church's account.
+
+### HRT-415, a monthly figure that did not say so
+
+The Giving board's repeating tile read "Repeating gifts, $86,666.66, 1 repeating gift", which reads
+as the total of what repeats. It is not: `recurringMonthly` brings every schedule to a month, so one
+$20,000 weekly gift is $20,000 times 52 over 12. The label says "Expected a month" now and the line
+under it says what it is from.
 
 ### HRT-407, the domain reading was built and never wired up
 

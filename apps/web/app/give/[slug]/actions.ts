@@ -22,8 +22,16 @@ export interface GiveResult {
   url?: string;
 }
 
-/** What a church will take in one gift, so a typo cannot create a $90,000 charge. */
-const MOST = 2_000_000;
+/**
+ * R13.2. The most a church takes in one gift, so a typo cannot charge a card
+ * for a figure nobody meant.
+ *
+ * $100,000. It was $20,000, which was low enough to refuse gifts churches
+ * actually receive: a building campaign taking one large gift online, or a
+ * bequest, is the transaction a church least wants bounced. The guard is worth
+ * keeping and the number was not.
+ */
+const MOST = 10_000_000;
 const LEAST = 100;
 
 /**

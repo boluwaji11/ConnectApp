@@ -35,8 +35,14 @@ const GIFT_EVENTS = [
   "payment_intent.processing",
   "payment_intent.payment_failed",
   "charge.dispute.created",
+  /* HRT-414. One refund is announced more than one way, and a refund made in
+     Stripe's own dashboard raises the first two of these and neither of the
+     last two. All four are taken; the handler reads the charge's total, so
+     hearing the same refund four times records it once. */
+  "refund.created",
   "refund.updated",
   "charge.refund.updated",
+  "charge.refunded",
   "customer.subscription.created",
   "customer.subscription.updated",
   "customer.subscription.deleted",

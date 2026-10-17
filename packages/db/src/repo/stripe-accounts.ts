@@ -298,36 +298,63 @@ export async function failOnlineGift(input: {
 }
 
 /**
- * R13.15. What became of a refund, days after it was asked for.
+ * R13.15, HRT-414. What Stripe says has been refunded against a gift.
  *
- * A refund to a bank account is an instruction, the same as the gift was.
- * Where the bank refuses it the money never left the church, so what was
- * taken off the gift goes back on and the line says the refund failed.
+ * The total is taken from Stripe rather than added up here, which is what
+ * makes this safe to call twice. Stripe redelivers whenever it is unsure one
+ * landed, a refund arrives as several event types, and a charge can be
+ * refunded in parts; accumulating under any of those subtracts twice. The
+ * charge's own `amount_refunded` is the one number that is true whatever
+ * order the events arrive in, and it falls back when a refund fails.
+ *
+ * It no longer matters where the refund was made. Before this, only a refund
+ * the product itself issued was ever recorded, because the row had to already
+ * carry the refund's id; a treasurer who refunded in Stripe's dashboard, which
+ * is where a treasurer with a Stripe login goes, left the gift reading as
+ * given in full and the year-end statement overstating it.
  */
-export async function markRefund(input: {
+export async function recordRefund(input: {
   accountId: string;
+  /** The refund this event was about, kept as the most recent one seen. */
   refundId: string;
-  status: "settled" | "failed";
-  amountCents: number;
+  paymentIntentId?: string | null;
+  chargeId?: string | null;
+  /** The charge's total refunded, from Stripe. Not a delta. */
+  refundedCents: number;
+  /** Where that total currently stands. */
+  status: "settled" | "pending" | "failed";
 }): Promise<void> {
   const tenantId = await tenantForStripeAccount(input.accountId);
   if (!tenantId) return;
 
-  if (input.status === "settled") {
-    await owner()`
-      update gifts set refund_status = 'settled', updated_at = now()
-       where tenant_id = ${tenantId}
-         and stripe_refund_id = ${input.refundId}
-         and refund_status = 'pending'`;
-    return;
-  }
+  const intentId = input.paymentIntentId ?? null;
+  const chargeId = input.chargeId ?? null;
+  if (!intentId && !chargeId) return;
 
+  /*
+   * `least` so a figure Stripe reports larger than the gift we hold, which
+   * should not happen and would mean the two disagree about the amount, can
+   * never put a gift into a refunded-for-more-than-it-was state that a
+   * statement would then have to explain.
+   */
   await owner()`
     update gifts
-       set refund_status = 'failed',
-           refunded_cents = greatest(0, refunded_cents - ${input.amountCents}),
+       set refunded_cents = least(${input.refundedCents}, amount_cents),
+           refunded_at = case
+             when ${input.refundedCents} > 0 then coalesce(refunded_at, now())
+             else null
+           end,
+           refund_status = case when ${input.refundedCents} > 0 then ${input.status} else null end,
+           stripe_refund_id = ${input.refundId},
            updated_at = now()
      where tenant_id = ${tenantId}
-       and stripe_refund_id = ${input.refundId}
-       and refund_status = 'pending'`;
+       and (
+         (${intentId}::text is not null and stripe_payment_intent_id = ${intentId})
+         or (${chargeId}::text is not null and stripe_charge_id = ${chargeId})
+       )
+       and (
+         refunded_cents is distinct from least(${input.refundedCents}, amount_cents)
+         or refund_status is distinct from
+            (case when ${input.refundedCents} > 0 then ${input.status} else null end)
+       )`;
 }

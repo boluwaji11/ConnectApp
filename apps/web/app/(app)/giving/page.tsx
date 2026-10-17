@@ -278,11 +278,14 @@ export default async function GivingPage({
             })}
             hue="sky"
           />
+          {/* R13.3. The figure is every repeating gift brought to a month,
+              so a weekly $20,000 reads as $86,666.66. The label says so: it
+              said "Repeating gifts", which reads as their total. */}
           <Figure
             icon={<Repeat />}
-            label={t("giving.recurring")}
+            label={t("giving.expectedMonthly")}
             value={money(read.expected)}
-            sub={plural("giving.repeating.count", read.allRecurring)}
+            sub={plural("giving.repeating.from", read.allRecurring)}
             hue="amber"
           />
         </Figures>
