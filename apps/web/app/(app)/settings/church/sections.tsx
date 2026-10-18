@@ -33,16 +33,20 @@ export function ChurchSections({
     <>
       {heading}
 
-      <ChurchForm
-        values={values}
-        canEdit={canEdit}
-        logo={logo}
-        editing={editing}
-        onEditing={setEditing}
-      />
+      {/* R24.6. The church's own details, and where it meets, on one line.
+          The second is four words and a name, and a card of its own across the
+          full width left a band of nothing beside it. One column on a phone. */}
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(240px,1fr)]">
+        <ChurchForm
+          values={values}
+          canEdit={canEdit}
+          logo={logo}
+          editing={editing}
+          onEditing={setEditing}
+        />
 
-      <Places campus={campus} canEdit={canEdit} editing={editing} />
-
+        <Places campus={campus} canEdit={canEdit} editing={editing} />
+      </div>
 
     </>
   );

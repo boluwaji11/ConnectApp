@@ -115,6 +115,22 @@ async function main() {
         on conflict do nothing`;
     }
 
+    /*
+     * R13.9. The two funds a church gets on the way in.
+     *
+     * `createChurch` writes these, and this script writes a church straight
+     * into the table instead, so a seeded church had none: the funds screen
+     * was empty, a gift had nowhere to go, and the setup guide's fund step
+     * could never go green. Migration 0117 backfilled the churches that
+     * existed when it ran, which is not the ones this makes afterwards.
+     */
+    await sql`
+      insert into funds (tenant_id, name, code, position)
+      values
+        (${tid}, 'General', 'GEN', 0),
+        (${tid}, 'Offering & Tithe', 'OFF', 1)
+      on conflict do nothing`;
+
     const [campus] = await sql<{ id: string }[]>`
       insert into campuses (tenant_id, name, is_primary) values (${tid}, ${"Main"}, true) returning id`;
     const [location] = await sql<{ id: string }[]>`

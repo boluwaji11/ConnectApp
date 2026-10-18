@@ -1,9 +1,10 @@
 import { requireSession } from "@/lib/session";
-import { SettingsHeading } from "../heading";
 import { Security } from "./security";
 import { TwoStep } from "./two-step";
 import { twoStepFor } from "@connectapp/db";
 import { relyingParty } from "@/lib/passkey";
+import { presentable } from "@/lib/two-step";
+import { SecurityOverview } from "./overview";
 import { t } from "@connectapp/i18n";
 import { tabMetadata } from "@/lib/page-metadata";
 
@@ -24,23 +25,49 @@ export default async function SecurityPage() {
   const session = await requireSession();
   /* R1.8. The mirror, not Supabase: this screen draws the state, it does not
      act on a factor until somebody presses something. */
-  const twoStep = await twoStepFor(session.userId);
-  /* R1.8, R21.1. Null on a church's own domain, where a key bound to our name
-     would not work. The decision is made on the server for the reason
-     lib/passkey.ts gives. */
-  const passkey = await relyingParty();
+  const [twoStep, passkey, held] = await Promise.all([
+    twoStepFor(session.userId),
+    relyingParty(),
+    presentable(),
+  ]);
 
   return (
-    <>
-      <SettingsHeading title="settings.tab.security" lede="settings.lede.security" />
+    /*
+     * R24.6. The reading on the left, the controls on the right.
+     *
+     * Three cards that are all shut by default answer nothing on arrival, and
+     * "is my account actually protected" was three presses away. The rail
+     * answers it without opening anything, and goes above the cards on a
+     * phone, where there is one column and the answer should still come
+     * first.
+     */
+    <div className="flex flex-col gap-6">
+      {/* The name of the screen spans both columns, so the overview card and
+          the three cards beside it start on the same line. */}
+      <div>
+        <h2 className="font-display text-[28px] leading-[34px] text-fg">
+          {t("security.title")}
+        </h2>
+        <p className="mt-1 text-fg-muted">{t("settings.lede.security")}</p>
+      </div>
+
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
+      <SecurityOverview
+        email={session.email}
+        twoStepOn={twoStep.enrolledAt !== null}
+        codesLeft={twoStep.codesLeft}
+      />
+
       <div className="flex flex-col gap-4">
         <Security email={session.email} />
         <TwoStep
           enrolled={twoStep.enrolledAt !== null}
           codesLeft={twoStep.codesLeft}
           passkey={passkey}
+          passkeyHeld={held.known && held.passkey !== null && held.totp === null}
         />
       </div>
-    </>
+      </div>
+    </div>
   );
 }

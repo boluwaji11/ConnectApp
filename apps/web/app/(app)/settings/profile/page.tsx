@@ -141,10 +141,18 @@ export default async function ProfilePage({
         </Banner>
       )}
 
-      {/* R24.x, R16.10. What somebody settles once: how the product is drawn,
-          and whether this browser tells them when something arrives. Both were
-          elsewhere, one on a menu of its own and one in the sidebar. */}
-      <SettingCard icon={<SunMoon />} title={t("settings.preferences")}>
+      {/* R24.x, R16.10, R1.6. Two things somebody reads rather than fills in:
+          how the product is drawn, and which church they are signed in to.
+          Side by side, because neither is long enough to hold a row of its own
+          and a rule between them says they are separate. One column on a
+          phone, where there is no room for two. */}
+      <div className="grid gap-5 md:grid-cols-2 md:gap-0 md:divide-x md:divide-line">
+      <div className="md:pr-5">
+      <SettingCard
+        className="h-full"
+        icon={<SunMoon />}
+        title={t("settings.preferences")}
+      >
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             {/* The same label every other field on this screen carries. */}
@@ -156,10 +164,14 @@ export default async function ProfilePage({
         </div>
       </SettingCard>
 
+      </div>
+
       {/* R1.6. Which church somebody is signed in to and what they may do in
           it. Neither is theirs to change, so it sits outside the card the
           pencil opens. */}
+      <div className="md:pl-5">
       <SettingCard
+        className="h-full"
         icon={<Church />}
         title={t("settings.profile.church")}
         lede={session.tenantName}
@@ -172,6 +184,8 @@ export default async function ProfilePage({
           </Detail>
         </Details>
       </SettingCard>
+      </div>
+      </div>
     </>
   );
 }

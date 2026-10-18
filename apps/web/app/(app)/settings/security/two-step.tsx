@@ -32,7 +32,8 @@ type Stage =
   | { at: "scan"; factorId: string; qr: string; secret: string }
   | { at: "code"; factorId: string }
   | { at: "codes"; codes: string[] }
-  | { at: "turnOff" };
+  | { at: "turnOff" }
+  | { at: "reissue" };
 
 const APP_LINK = "font-medium text-primary underline-offset-4 hover:underline";
 
@@ -145,11 +146,14 @@ export function TwoStep({
   enrolled,
   codesLeft,
   passkey,
+  passkeyHeld: heldAtFirst,
 }: {
   enrolled: boolean;
   codesLeft: number;
   /** Null where a passkey cannot be bound to one of our own names. */
   passkey: RelyingParty | null;
+  /** Whether what is protecting this account is a passkey rather than an app. */
+  passkeyHeld?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const [stage, setStage] = React.useState<Stage>({ at: "shut" });
@@ -163,6 +167,9 @@ export function TwoStep({
   const [left, setLeft] = React.useState(codesLeft);
   /* R1.8. Reset with every set, so a reissue is confirmed on its own. */
   const [said, setSaid] = React.useState(false);
+  /* Which kind is protecting the account, redrawn without a reload when
+     this screen is the one that set it up. */
+  const [passkeyHeld, setPasskeyHeld] = React.useState(Boolean(heldAtFirst));
 
   const shut = () => {
     setStage({ at: "shut" });
@@ -197,6 +204,7 @@ export function TwoStep({
       const done = await completePasskey();
       if ("error" in done) return setCardError(done.error);
       setIsOn(true);
+      setPasskeyHeld(true);
       setLeft(done.codes.length);
       setSaid(false);
       setStage({ at: "codes", codes: done.codes });
@@ -211,6 +219,7 @@ export function TwoStep({
       const done = await confirmTwoStep(factorId, code);
       if ("error" in done) return setError(done.error);
       setIsOn(true);
+      setPasskeyHeld(false);
       setLeft(done.codes.length);
       setCode("");
       setSaid(false);
@@ -224,6 +233,7 @@ export function TwoStep({
       const result = await stopTwoStep(data);
       if (result.error) return setError(result.error);
       setIsOn(false);
+      setPasskeyHeld(false);
       setLeft(0);
       shut();
     });
@@ -246,7 +256,8 @@ export function TwoStep({
     stage.at === "codes" ? t("twoStep.codesTitle")
       : stage.at === "code" ? t("twoStep.enterTitle")
         : stage.at === "turnOff" ? t("twoStep.offConfirm")
-          : t("twoStep.setUp");
+          : stage.at === "reissue" ? t("twoStep.reissue")
+            : t("twoStep.setUp");
 
   return (
     <>
@@ -292,49 +303,63 @@ export function TwoStep({
               </div>
             ) : (
               /*
-                * Two things somebody comes back for, and they are not the same
-                * kind of thing. Side by side as two password boxes, the screen
-                * asked for the password twice and said nothing about why, and
-                * the destructive one was no harder to reach than the routine
-                * one. Each gets a heading that says what it does, and turning
-                * it off asks in a box of its own.
+                * Three blocks: what is protecting the account, the way back in
+                * if it is lost, and the way out. Side by side as two password
+                * boxes the screen asked for the password twice and said
+                * nothing about why, and the destructive one was no harder to
+                * reach than the routine one. Both now ask in a box of their
+                * own.
                 */
               <div className="flex flex-col gap-6">
-                <section className="flex flex-col gap-3">
-                  <div>
-                    <h3 className="font-semibold text-fg">{t("twoStep.codesSection")}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {t("twoStep.codesSectionLede")}
-                    </p>
-                  </div>
-                  <form noValidate action={reissue} className="flex flex-col items-start gap-3">
-                    <div className="w-full max-w-sm">
-                      <Field label={t("twoStep.confirmPassword")} required>
-                        <Input name="password" type="password" autoComplete="current-password" />
-                      </Field>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {t("twoStep.codesInvalidate")}
-                    </p>
-                    <Button type="submit" variant="secondary" disabled={pending}>
-                      {t("twoStep.generate")}
-                    </Button>
-                  </form>
+                <section className="flex flex-col gap-2">
+                  <h3 className="text-[15px] font-bold text-fg">
+                    {passkeyHeld ? t("twoStep.passkeyTitle") : t("twoStep.appTitle")}
+                  </h3>
+                  <p className="text-[13px] text-fg-muted">
+                    {passkeyHeld ? t("twoStep.passkeyLede") : t("twoStep.appLede")}
+                  </p>
+                  <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-success-soft px-2.5 py-0.5 text-[13px] font-semibold text-success-text">
+                    <Check aria-hidden className="size-3.5" />
+                    {t("twoStep.connected")}
+                  </span>
                 </section>
 
-                <div className="border-t" />
+                <div className="border-t border-line" />
 
                 <section className="flex flex-col gap-3">
                   <div>
-                    <h3 className="font-semibold text-fg">{t("twoStep.offSection")}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {t("twoStep.offSectionLede")}
-                    </p>
+                    <h3 className="text-[15px] font-bold text-fg">{t("twoStep.codesSection")}</h3>
+                    <p className="text-[13px] text-fg-muted">{t("twoStep.codesUse")}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-[14px] text-fg">{plural("twoStep.unused", left)}</span>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={pending}
+                      onClick={() => setStage({ at: "reissue" })}
+                    >
+                      {t("twoStep.generate")}
+                    </Button>
+                  </div>
+                  <p className="rounded-[10px] bg-sunken px-3 py-2 text-[13px] text-fg-muted">
+                    {t("twoStep.codesInvalidate")}
+                  </p>
+                </section>
+
+                <div className="border-t border-line" />
+
+                <section className="flex flex-col gap-3">
+                  <div>
+                    <h3 className="text-[15px] font-bold text-danger-text">
+                      {t("twoStep.offSection")}
+                    </h3>
+                    <p className="text-[13px] text-fg-muted">{t("twoStep.offSectionLede")}</p>
                   </div>
                   <Button
                     type="button"
                     variant="secondary"
-                    className="self-start text-danger"
+                    className="self-start border-danger text-danger-text"
                     disabled={pending}
                     onClick={() => setStage({ at: "turnOff" })}
                   >
@@ -427,6 +452,15 @@ export function TwoStep({
               ? <Codes codes={stage.codes} said={said} onSaid={setSaid} />
               : null}
 
+            {stage.at === "reissue" ? (
+              <form id="reissue-codes" noValidate action={reissue} className="flex flex-col gap-4">
+                <p className="text-sm text-muted-foreground">{t("twoStep.codesInvalidate")}</p>
+                <Field label={t("twoStep.confirmPassword")} required>
+                  <Input name="password" type="password" autoComplete="current-password" autoFocus />
+                </Field>
+              </form>
+            ) : null}
+
             {stage.at === "turnOff" ? (
               <form id="turn-off-two-step" noValidate action={turnOff} className="flex flex-col gap-4">
                 <p className="text-sm text-muted-foreground">{t("twoStep.offConfirmBody")}</p>
@@ -464,6 +498,22 @@ export function TwoStep({
               <Button type="button" full onClick={shut} disabled={!said}>
                 <Check /> {t("twoStep.codesKept")}
               </Button>
+            ) : null}
+
+            {stage.at === "reissue" ? (
+              <>
+                <Button type="button" variant="ghost" onClick={shut} disabled={pending}>
+                  {t("action.cancel")}
+                </Button>
+                <Button
+                  type="submit"
+                  form="reissue-codes"
+                  loading={pending}
+                  disabled={pending}
+                >
+                  {t("twoStep.generate")}
+                </Button>
+              </>
             ) : null}
 
             {stage.at === "turnOff" ? (

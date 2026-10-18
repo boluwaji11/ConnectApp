@@ -115,6 +115,12 @@ export function FundManager({
         <FundPanel pending={pending} codesInUse={codes} />
       </div>
 
+      {/* R13.9. A church creating itself is given two funds, so this is empty
+          only where the records were made another way. An empty grid said
+          nothing at all, which reads as a screen that failed to load. */}
+      {live.length === 0 ? (
+        <Empty icon="tag" title={t("fund.none")} body={t("fund.noneBody")} />
+      ) : (
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(230px,100%),1fr))]">
         {live.map((fund) => (
           <FundPanel
@@ -148,6 +154,7 @@ export function FundManager({
           />
         ))}
       </div>
+      )}
 
       <Dialog open={asking !== null} onOpenChange={(on) => (on ? null : setAsking(null))}>
         <DialogContent alert title={t("fund.archiveTitle", { name: asking?.name ?? "" })}>

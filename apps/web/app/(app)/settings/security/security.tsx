@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, KeyRound, Mail } from "lucide-react";
+import { ArrowRight, KeyRound, Mail } from "lucide-react";
 import { Banner, Button, Field, Input } from "@connectapp/ui";
 import { t } from "@connectapp/i18n";
 import { Said } from "@/components/said";
@@ -21,36 +21,6 @@ import { useAnswered } from "@/components/form-actions";
  * strength of an open session, and an open session is a laptop somebody walked
  * away from.
  */
-function Row({
-  icon,
-  title,
-  value,
-  open,
-  onToggle,
-  children,
-}: {
-  /** The mark that says which kind of thing this row changes. */
-  icon: React.ReactNode;
-  title: string;
-  /** What it is set to now, read without opening anything. */
-  value?: string;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <SettingCard
-      icon={icon}
-      title={title}
-      lede={value}
-      onPress={onToggle}
-      expanded={open}
-    >
-      {open ? children : undefined}
-    </SettingCard>
-  );
-}
-
 export function Security({ email }: { email: string }) {
   const [open, setOpen] = React.useState<"email" | "password" | null>(null);
   const [error, setError] = useFormError(open);
@@ -93,79 +63,121 @@ export function Security({ email }: { email: string }) {
       {error ? <Banner tone="danger">{error}</Banner> : null}
       <Said message={message} onClose={() => setMessage(undefined)} />
 
-      <Row
+      <SettingCard
         icon={<Mail />}
-        title={t("email.row")}
-        value={email}
-        open={open === "email"}
-        onToggle={() => toggle("email")}
+        title={t("email.title")}
+        lede={email}
+        onPress={() => toggle("email")}
+        expanded={open === "email"}
       >
-        <form
-          id={emailForm}
-          noValidate
-          action={(data) => run("email", () => changeEmail(data), t("email.sent"))}
-          className="flex flex-wrap items-end gap-3"
-        >
-          <div className="min-w-56 flex-1">
+        {open === "email" ? (
+          <form
+            id={emailForm}
+            noValidate
+            action={(data) => run("email", () => changeEmail(data), t("email.sent"))}
+            className="flex flex-col gap-4"
+          >
+            <div>
+              <h3 className="text-[15px] font-bold text-fg">{t("email.changeTitle")}</h3>
+              <p className="text-[13px] text-fg-muted">{t("email.changeLede")}</p>
+            </div>
+
             <Field label={t("email.new")} required>
-              <Input name="email" type="email" autoComplete="email" autoFocus />
+              <Input name="email" type="email" autoComplete="email" placeholder={t("email.hint")} autoFocus />
             </Field>
-          </div>
-          <div className="min-w-48 flex-1">
-            <Field label={t("email.password")} required>
-              <Input name="password" type="password" autoComplete="current-password" />
-            </Field>
-          </div>
-          <Button type="submit" loading={doing === "email"} disabled={pending || !emailFull}>
-            <Check /> {t("email.change")}
-          </Button>
-        </form>
-      </Row>
 
-      <Row
-        icon={<KeyRound />}
-        title={t("password.row")}
-        open={open === "password"}
-        onToggle={() => toggle("password")}
-      >
-        <form
-          id={passwordForm}
-          noValidate
-          action={(data) => run("password", () => changePassword(data), t("password.changed"))}
-          className="flex flex-col gap-4"
-        >
-          <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr))]">
-            <Field label={t("password.current")} required>
-              <Input name="current" type="password" autoComplete="current-password" autoFocus />
+            <Field label={t("twoStep.confirmPassword")} required>
+              <Input
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                placeholder={t("email.passwordHint")}
+              />
             </Field>
-            <Field label={t("password.new")} required>
-              <Input name="next" type="password" autoComplete="new-password" />
-            </Field>
-            <Field label={t("password.confirm")} required>
-              <Input name="confirm" type="password" autoComplete="new-password" />
-            </Field>
-          </div>
 
-          {/* These appear once on the screen rather than on every row of a
-              list, so they keep their words. */}
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            {/* R1.8. Somebody who has only ever signed in by an email link has
-                no current password to give, so they ask for one instead. */}
             <Button
-              type="button"
-              variant="ghost"
-              loading={doing === "link"}
-              disabled={pending}
-              onClick={() => run("link", emailMeALink, t("signUp.sent.title"))}
+              type="submit"
+              className="self-start"
+              loading={doing === "email"}
+              disabled={pending || !emailFull}
             >
-              <Mail /> {t("password.sendLink")}
+              {t("email.save")}
             </Button>
-            <Button type="submit" loading={doing === "password"} disabled={pending || !passwordFull}>
-              <KeyRound /> {t("password.change")}
-            </Button>
+          </form>
+        ) : undefined}
+      </SettingCard>
+
+      <SettingCard
+        icon={<KeyRound />}
+        title={t("password.title")}
+        lede={t("password.cardLede")}
+        onPress={() => toggle("password")}
+        expanded={open === "password"}
+      >
+        {open === "password" ? (
+          <div className="flex flex-col gap-4">
+            <form
+              id={passwordForm}
+              noValidate
+              action={(data) => run("password", () => changePassword(data), t("password.changed"))}
+              className="flex flex-col gap-4"
+            >
+              <div>
+                <h3 className="text-[15px] font-bold text-fg">{t("password.changeTitle")}</h3>
+                <p className="text-[13px] text-fg-muted">{t("password.changeLede")}</p>
+              </div>
+
+              <Field label={t("password.current")} required>
+                <Input
+                  name="current"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder={t("password.current")}
+                  autoFocus
+                />
+              </Field>
+
+              <Field label={t("password.new")} required hint={t("password.newHint")}>
+                <Input
+                  name="next"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder={t("password.new")}
+                />
+              </Field>
+
+              <Field label={t("password.confirm")} required>
+                <Input
+                  name="confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder={t("password.confirmHint")}
+                />
+              </Field>
+
+              <Button
+                type="submit"
+                className="self-start"
+                loading={doing === "password"}
+                disabled={pending || !passwordFull}
+              >
+                {t("password.update")}
+              </Button>
+            </form>
+
+            {/* R1.8. For somebody who has only ever signed in by email link and
+                has no current password to type above. */}
+            <button
+              type="button"
+              onClick={() => run("link", () => emailMeALink(), t("email.sent"))}
+              disabled={pending}
+              className="inline-flex items-center gap-1.5 self-start text-sm font-medium text-primary underline-offset-4 hover:underline"
+            >
+              {t("password.forgot")} <ArrowRight aria-hidden className="size-4" />
+            </button>
           </div>
-        </form>
-      </Row>
+        ) : undefined}
+      </SettingCard>
     </div>
   );
 }
