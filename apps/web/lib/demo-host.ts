@@ -40,8 +40,16 @@ export function isDemoHost(host: string | null | undefined): boolean {
  */
 export function cameFrom(headers: Headers): { host: string; proto: string } {
   const host = headers.get("x-forwarded-host") ?? headers.get("host") ?? "";
-  const proto = headers.get("x-forwarded-proto")
-    ?? (host.startsWith("localhost") || host.endsWith(".localhost") ? "http" : "https");
+  /*
+   * The port is cut off before the name is read. `riverside.localhost:4488`
+   * ends with the port rather than with `.localhost`, so a church's own
+   * address on a laptop was read as a public one and answered https, which
+   * nothing is listening on. The dev server sends `x-forwarded-proto` and hid
+   * it; a request without that header did not.
+   */
+  const name = host.split(":")[0]?.toLowerCase() ?? "";
+  const local = name === "localhost" || name.endsWith(".localhost");
+  const proto = headers.get("x-forwarded-proto") ?? (local ? "http" : "https");
   return { host, proto };
 }
 
@@ -65,4 +73,25 @@ export function productSite(host: string | null | undefined): string {
   const bare = name.replace(/^demo\./i, "");
   const proto = bare === "localhost" || bare.endsWith(".localhost") ? "http" : "https";
   return `${proto}://${bare}${port}/`;
+}
+
+/**
+ * R17.1, HRT-306. Where signing out lands.
+ *
+ * The address the browser is on, not the one Next resolved the handler at.
+ * `new URL(request.url).origin` is the second of those, so signing out on a
+ * church's own address sent the person to the bare product.
+ *
+ * The CSP is what turned that from wrong into broken. `form-action 'self'` is
+ * checked against a redirect as well as against the form's own target, so a
+ * sign-out that crossed from a church's address to ours was refused by the
+ * browser and the press did nothing at all.
+ *
+ * The demo is the one place a different host is the right answer: leaving it
+ * leaves its address, or the next request hands the visitor a fresh demo
+ * church and signs them straight back in.
+ */
+export function afterSignOut(headers: Headers): string {
+  const { host, proto } = cameFrom(headers);
+  return isDemoHost(host) ? productSite(host) : `${proto}://${host}/`;
 }

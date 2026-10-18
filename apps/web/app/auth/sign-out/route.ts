@@ -3,7 +3,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { clearDemoPass } from "@/lib/demo-pass";
 import { forgetChurch } from "@/lib/church-choice";
 import { DEV_PASS } from "@/lib/dev-gate";
-import { isDemoHost, productSite } from "@/lib/demo-host";
+import { afterSignOut } from "@/lib/demo-host";
 import { cookies } from "next/headers";
 
 export async function POST(request: NextRequest) {
@@ -32,8 +32,19 @@ export async function POST(request: NextRequest) {
    * product's own site instead, which is what somebody who has finished
    * looking around wants to see.
    */
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  const away = isDemoHost(host) ? productSite(host) : `${new URL(request.url).origin}/`;
+  /*
+   * R17.1, HRT-306. Back to the address the browser is actually on.
+   *
+   * `new URL(request.url).origin` is the host this handler was reached at
+   * after Next resolved it, which is not the host the person typed: signing
+   * out on `riverside.connectapp.church` sent them to the bare product.
+   *
+   * That became visible rather than merely wrong once the CSP arrived.
+   * `form-action 'self'` is checked against a redirect as well as against the
+   * form's own target, so a sign-out that crossed from a church's address to
+   * ours was blocked by the browser and the press did nothing at all.
+   */
+  const away = afterSignOut(request.headers);
 
   /*
    * 303, not the 307 this used to send. A 307 keeps the method, so the
