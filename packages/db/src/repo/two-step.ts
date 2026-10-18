@@ -89,15 +89,32 @@ export async function markTwoStepOn(userId: string): Promise<void> {
 }
 
 /**
- * Called when the factor is removed, and whenever Supabase says there is no
- * factor to present.
+ * Takes two-step off: the factor, the mirror and the codes, together.
+ *
+ * **The factor is deleted here rather than through Supabase's own API, and
+ * that is not a shortcut.** `mfa.unenroll` refuses a verified factor unless
+ * the session has already presented one: "AAL2 required to unenroll verified
+ * factor". The one path that most needs to remove a factor is the recovery
+ * code, used by somebody whose phone is gone, who by definition cannot
+ * present it. So the API can never serve it.
+ *
+ * The owner connection is the only authority left, and it is the same
+ * connection every migration runs on. The delete is scoped to one user.
+ *
+ * All three in one transaction, because the states in between are the ones
+ * that cause trouble: a factor with no mirror is an account that looks
+ * unprotected and refuses to sign in, and a mirror with no factor is an
+ * account that looks protected by something nobody can present.
  *
  * The codes go with it. A code that unlocks nothing is worse than no code: it
  * reads as a way in that is still good.
  */
 export async function markTwoStepOff(userId: string): Promise<void> {
-  await owner()`update app_users set mfa_enrolled_at = null where id = ${userId}`;
-  await owner()`delete from account_recovery_codes where user_id = ${userId}`;
+  await owner().begin(async (tx) => {
+    await tx`delete from auth.mfa_factors where user_id = ${userId}`;
+    await tx`update app_users set mfa_enrolled_at = null where id = ${userId}`;
+    await tx`delete from account_recovery_codes where user_id = ${userId}`;
+  });
 }
 
 /**

@@ -134,61 +134,35 @@ describe("a factor list that was read", () => {
   });
 });
 
-describe("turning two-step off is all or nothing", () => {
+describe("turning two-step off", () => {
   /*
-   * This cleared the mirror whatever happened. `held ?? []` is an empty loop
-   * when the list could not be read, so a failed call turned two-step off in
-   * our column and left a verified factor in Supabase: the screen said Off and
-   * the account was still protected by something nobody could see. It is the
-   * same mistake as reading an unreadable list as an empty one, on the writing
-   * side, and it put a real development account into that state.
+   * It does not ask Supabase. `mfa.unenroll` refuses a verified factor unless
+   * the session has already presented one, and the path that most needs to
+   * remove a factor is the recovery code, used by somebody whose phone is
+   * gone. The loop that used to be here failed every time on that path,
+   * ignored the answer, and cleared the mirror anyway, which left a real
+   * account holding a verified factor nobody could see.
    */
-  it("does not clear the mirror when the factors could not be read", async () => {
-    listFactors.mockResolvedValue({ data: null, error: { message: "timeout" } });
-    const { turnOffEverything } = await load();
-
-    expect(await turnOffEverything("u1")).toEqual({ error: "twoStep.error.again" });
-    expect(markTwoStepOff).not.toHaveBeenCalled();
-  });
-
-  it("does not clear the mirror when a factor refuses to come off", async () => {
-    listFactors.mockResolvedValue({
-      data: { all: [{ id: "f1", status: "verified", factor_type: "totp" }], totp: [] },
-      error: null,
-    });
-    unenroll.mockResolvedValue({ error: { message: "nope" } });
-    const { turnOffEverything } = await load();
-
-    expect(await turnOffEverything("u1")).toEqual({ error: "twoStep.error.again" });
-    expect(markTwoStepOff).not.toHaveBeenCalled();
-  });
-
-  it("clears the mirror once every factor is off", async () => {
-    listFactors.mockResolvedValue({
-      data: {
-        all: [
-          { id: "f1", status: "verified", factor_type: "totp" },
-          { id: "f2", status: "verified", factor_type: "webauthn" },
-        ],
-        totp: [],
-      },
-      error: null,
-    });
+  it("never calls unenroll, which cannot work on the path that needs it", async () => {
+    listFactors.mockResolvedValue({ data: { all: [], totp: [] }, error: null });
     const { turnOffEverything } = await load();
 
     expect(await turnOffEverything("u1")).toEqual({});
-    expect(unenroll).toHaveBeenCalledTimes(2);
+    expect(unenroll).not.toHaveBeenCalled();
+  });
+
+  it("takes the factor, the mirror and the codes off together", async () => {
+    const { turnOffEverything } = await load();
+    await turnOffEverything("u1");
     expect(markTwoStepOff).toHaveBeenCalledWith("u1");
   });
 
-  it("spends a recovery code and reports a turn-off that failed", async () => {
-    spendRecoveryCode.mockResolvedValue(true);
+  it("works without asking Supabase anything at all", async () => {
     listFactors.mockResolvedValue({ data: null, error: { message: "timeout" } });
-    const { redeemRecoveryCode } = await load();
+    const { turnOffEverything } = await load();
 
-    expect(await redeemRecoveryCode("u1", "abcde-fghij"))
-      .toEqual({ error: "twoStep.error.again" });
-    expect(markTwoStepOff).not.toHaveBeenCalled();
+    expect(await turnOffEverything("u1")).toEqual({});
+    expect(markTwoStepOff).toHaveBeenCalledWith("u1");
   });
 
   it("refuses a recovery code that is not theirs without touching the factor", async () => {
@@ -197,7 +171,14 @@ describe("turning two-step off is all or nothing", () => {
 
     expect(await redeemRecoveryCode("u1", "nope"))
       .toEqual({ error: "twoStep.error.recovery" });
-    expect(unenroll).not.toHaveBeenCalled();
     expect(markTwoStepOff).not.toHaveBeenCalled();
+  });
+
+  it("spends a right one and turns two-step off", async () => {
+    spendRecoveryCode.mockResolvedValue(true);
+    const { redeemRecoveryCode } = await load();
+
+    expect(await redeemRecoveryCode("u1", "abcde-fghij")).toEqual({});
+    expect(markTwoStepOff).toHaveBeenCalledWith("u1");
   });
 });

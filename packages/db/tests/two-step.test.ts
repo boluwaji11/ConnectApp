@@ -16,8 +16,17 @@ import {
 const PERSON = "dddddddd-1111-4111-8111-111111111111";
 const OTHER = "dddddddd-2222-4222-8222-222222222222";
 
+/**
+ * Both halves of a person: the authentication row Supabase owns and the mirror
+ * this product keeps. Both, because `markTwoStepOff` deletes the factor and a
+ * factor points at `auth.users`.
+ */
 async function makeUser(id: string, email: string) {
   await owner()`delete from app_users where id = ${id}`;
+  await owner()`delete from auth.users where id = ${id}`;
+  await owner()`
+    insert into auth.users (id, instance_id, aud, role, email)
+    values (${id}, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', ${email})`;
   await owner()`insert into app_users (id, email) values (${id}, ${email})`;
 }
 
@@ -28,6 +37,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await owner()`delete from app_users where id in (${PERSON}, ${OTHER})`;
+  await owner()`delete from auth.users where id in (${PERSON}, ${OTHER})`;
   await closeConnections();
 });
 
@@ -126,6 +136,49 @@ describe("recovery codes", () => {
 
     await markTwoStepOff(PERSON);
     expect(await twoStepFor(PERSON)).toEqual({ enrolledAt: null, codesLeft: 0 });
+  });
+});
+
+describe("the factor itself", () => {
+  /*
+   * Supabase will not unenroll a verified factor from a session that has not
+   * presented one: "AAL2 required to unenroll verified factor". The path that
+   * most needs to remove a factor is the recovery code, used by somebody
+   * whose phone is gone, so the API can never serve it and the row is deleted
+   * here instead.
+   *
+   * The web app ignored what unenroll answered and cleared the mirror anyway,
+   * which left accounts holding a verified factor nobody could see. This is
+   * the case that would have caught it.
+   */
+  const factorFor = async (userId: string) => {
+    const rows = await owner()<{ id: string }[]>`
+      select id from auth.mfa_factors where user_id = ${userId}`;
+    return rows.length;
+  };
+
+  it("goes when two-step is turned off", async () => {
+    await owner()`
+      insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at, secret)
+      values (gen_random_uuid(), ${PERSON}, 'test', 'totp', 'verified', now(), now(), 'SECRET')`;
+    expect(await factorFor(PERSON)).toBe(1);
+
+    await markTwoStepOff(PERSON);
+    expect(await factorFor(PERSON)).toBe(0);
+  });
+
+  it("leaves another person's alone", async () => {
+    for (const who of [PERSON, OTHER]) {
+      await owner()`
+        insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at, secret)
+        values (gen_random_uuid(), ${who}, 'test', 'totp', 'verified', now(), now(), 'SECRET')`;
+    }
+
+    await markTwoStepOff(PERSON);
+    expect(await factorFor(PERSON)).toBe(0);
+    expect(await factorFor(OTHER)).toBe(1);
+
+    await markTwoStepOff(OTHER);
   });
 });
 

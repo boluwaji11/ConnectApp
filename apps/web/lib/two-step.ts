@@ -220,16 +220,21 @@ export async function redeemRecoveryCode(
  * a code screen, and the recovery codes they were given are the way through.
  */
 export async function turnOffEverything(userId: string): Promise<{ error?: string }> {
-  const supabase = await supabaseServer();
-
-  const { held } = await factors();
-  if (held === null) return { error: "twoStep.error.again" };
-
-  for (const one of held) {
-    const { error } = await supabase.auth.mfa.unenroll({ factorId: one.id });
-    if (error) return { error: "twoStep.error.again" };
-  }
-
+  /*
+   * No call to `mfa.unenroll` here, deliberately.
+   *
+   * Supabase refuses to unenroll a verified factor from a session that has
+   * not presented one, and the path that most needs this is the recovery
+   * code, used by somebody whose phone is gone. `markTwoStepOff` removes the
+   * factor, the mirror and the codes in one transaction on the owner
+   * connection, which is the only authority that works at either assurance
+   * level. See the note on it.
+   *
+   * This used to loop over the factors and ignore what `unenroll` answered,
+   * so on the recovery path it failed every time, the mirror was cleared
+   * anyway, and the account was left holding a verified factor nobody could
+   * see. A real development account was found in exactly that state.
+   */
   await markTwoStepOff(userId);
   return {};
 }
