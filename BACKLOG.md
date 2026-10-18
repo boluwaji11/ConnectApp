@@ -1120,6 +1120,7 @@ of money and after everything else.
 | HRT-415 | The repeating gifts tile did not say the figure was a month | R13.3 | Resolved |
 | HRT-416 | demo.connectapp.church, the whole product on invented records | R19.7, R22.1 | Resolved |
 | HRT-417 | Every secret on Vercel is write only | R21.3 | Resolved |
+| HRT-418 | The connected report's chosen band was unreadable | R22.7, R18.x | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |
