@@ -13,6 +13,7 @@ import { requireSession } from "@/lib/session";
 import { proveSmtp, recordsPublished } from "@/lib/email-provider";
 import { resendClientId, revokeGrant } from "@/lib/resend-oauth";
 import { sendAsChurch } from "@/lib/transactional";
+import { stepUpNeeded, type MayNeedStepUp } from "@/lib/step-up";
 
 /**
  * HRT-287, R16.1, R21.15. Connecting the account a church's email leaves through.
@@ -24,7 +25,7 @@ import { sendAsChurch } from "@/lib/transactional";
  * leak it.
  */
 
-export interface EmailResult {
+export interface EmailResult extends MayNeedStepUp {
   error?: string;
   /** R16.1. The provider has gone, so the screen leaves the round trip's
       message behind in the address it arrived in. */
@@ -62,6 +63,11 @@ function from(data: FormData): { name: string; address: string } | { error: stri
 /** R16.1. A church's own mail server, proved by opening a session with it. */
 export async function connectSmtp(data: FormData): Promise<EmailResult> {
   const { actor, ctx } = await context();
+
+  /* R1.8, R21.4. These credentials send mail as the church to everybody in
+     it, so they are asked for behind the code rather than behind the role. */
+  const stop = await stepUpNeeded();
+  if (stop) return stop;
 
   const sender = from(data);
   if ("error" in sender) return { error: sender.error };
@@ -146,6 +152,12 @@ export async function checkRecords(): Promise<EmailResult> {
  */
 export async function disconnectEmail(): Promise<EmailResult> {
   const { actor, ctx } = await context();
+
+  /* R1.8, R21.4. Taking the account away stops every message the church
+     sends, which is as much of a change as connecting one. */
+  const stop = await stepUpNeeded();
+  if (stop) return stop;
+
   try {
     const held = await withTenant(ctx, (tx) => withdrawEmailProvider(tx, actor));
 

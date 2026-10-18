@@ -14,6 +14,8 @@ import { usePanelGuard } from "@/components/panel-guard";
 import { useAnswered } from "@/components/form-actions";
 import { when } from "@/lib/when";
 import { Stages } from "@/components/stages";
+import { StepUpDialog } from "@/components/step-up";
+import type { StepUp } from "@/lib/step-up";
 import {
   connectSmtp, checkRecords, disconnectEmail, sendTest, type EmailResult,
 } from "./actions";
@@ -89,11 +91,26 @@ export function EmailSetup({
     if (ok) setSent(t("email.test.sent", { address: to }));
   };
 
-  const act = async (run: () => Promise<EmailResult>, label: string) => {
-    setBusy(label);
+  /*
+   * R1.8, R21.4. Connecting or withdrawing the sending account asks for the
+   * code again: these credentials send mail as the church to everybody in it.
+   * Held here rather than at each press, because both go through `act`.
+   */
+  const [need, setNeed] = React.useState<StepUp | null>(null);
+  const again = React.useRef<(() => Promise<EmailResult>) | null>(null);
+  const label = React.useRef<string>("");
+
+  const act = async (run: () => Promise<EmailResult>, busyLabel: string): Promise<boolean> => {
+    setBusy(busyLabel);
     setError(null);
     const answer = await run();
     setBusy(null);
+    if (answer.stepUp) {
+      again.current = run;
+      label.current = busyLabel;
+      setNeed(answer.stepUp);
+      return false;
+    }
     if (answer.error) {
       setError(answer.error);
       return false;
@@ -110,9 +127,26 @@ export function EmailSetup({
     return true;
   };
 
+  const codeBox = (
+    <StepUpDialog
+      need={need}
+      onDone={() => {
+        setNeed(null);
+        const waiting = again.current;
+        again.current = null;
+        if (waiting) void act(waiting, label.current);
+      }}
+      onCancel={() => {
+        setNeed(null);
+        again.current = null;
+      }}
+    />
+  );
+
   return (
     <div className="flex flex-col gap-5">
       <Working open={busy !== null} label={busy ?? ""} />
+      {codeBox}
 
       {/* R16.1. The vendor's own words. A volunteer whose app password was
           refused needs to read "Username and Password not accepted" rather

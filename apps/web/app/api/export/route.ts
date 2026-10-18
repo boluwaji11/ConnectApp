@@ -3,6 +3,7 @@ import {
   withTenant, buildArchive, buildView, zipArchive, listPeople, resolveList, toCsv, PermissionError,
 } from "@connectapp/db";
 import { requireSession } from "@/lib/session";
+import { freshFactor } from "@/lib/step-up";
 import {
   queryFromParams, isFiltered, paramsFromRule, type DirectoryParams,
 } from "@/lib/directory-query";
@@ -23,6 +24,23 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const params = Object.fromEntries(request.nextUrl.searchParams) as DirectoryParams;
   const session = await requireSession();
+
+  /*
+   * R1.8, R19.8, R21.4. The code again, before every record leaves in one file.
+   *
+   * This does not weaken the commitment above. R19.8 is that nobody has to ask
+   * *us* to leave, and this asks nothing of us: it is the church's own
+   * administrator proving they are still the one at the keyboard. What it
+   * stops is an unattended session being a complete copy of the church.
+   *
+   * Answered as 428 with the reason rather than 403, because the screen can do
+   * something about it: it opens the code box and fetches again. The check is
+   * here as well as on the screen so that the address cannot simply be pasted.
+   */
+  const factor = await freshFactor();
+  if (!factor.fresh) {
+    return Response.json({ stepUp: factor.need }, { status: 428 });
+  }
 
   // The directory exports what the screen is showing, filtered or not. The
   // same URL that drew the screen draws the file, so the two cannot disagree

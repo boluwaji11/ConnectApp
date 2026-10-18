@@ -25,6 +25,46 @@ export const assurance = cache(async (): Promise<string> => {
   return typeof claim === "string" ? claim : "aal1";
 });
 
+/**
+ * HRT-442, R1.8, R21.4. How long a presented factor stays fresh here.
+ *
+ * Shorter than the product's five minutes. An operator session reaches every
+ * church, and the things it does with that reach, handing somebody the portal
+ * or taking an owner's second factor off, are each a single press.
+ */
+export const FRESH_FOR_SECONDS = 2 * 60;
+
+/** The kinds of `amr` entry that count as a second factor. */
+const SECOND_FACTOR = new Set(["totp", "webauthn", "mfa/totp", "mfa/webauthn"]);
+
+/**
+ * HRT-442. Whether this session presented its factor lately enough.
+ *
+ * `amr` on the access token carries the second each method got this session
+ * in, and presenting a code again moves the entry rather than adding one. The
+ * token is verified where the claims are read, so this costs no round trip.
+ */
+export const factorIsFresh = cache(async (): Promise<boolean> => {
+  const supabase = await supabaseServer();
+  const { data } = await supabase.auth.getClaims();
+  const amr = data?.claims?.["amr"];
+  if (!Array.isArray(amr)) return false;
+
+  let newest: number | null = null;
+  for (const entry of amr) {
+    if (!entry || typeof entry !== "object") continue;
+    const { method, timestamp } = entry as { method?: unknown; timestamp?: unknown };
+    if (typeof method !== "string" || !SECOND_FACTOR.has(method)) continue;
+    if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) continue;
+    if (newest === null || timestamp > newest) newest = timestamp;
+  }
+  if (newest === null) return false;
+
+  const age = Math.floor(Date.now() / 1000) - newest;
+  /* A timestamp ahead of now is a clock disagreeing, not a fresh factor. */
+  return age >= 0 && age <= FRESH_FOR_SECONDS;
+});
+
 export interface Standing {
   /** They have set it up, somewhere. */
   enrolled: boolean;

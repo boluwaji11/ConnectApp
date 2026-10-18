@@ -7,9 +7,29 @@ import { platform, platformHealth } from "@connectapp/db";
 import { approvedMessage, sendAsPlatform } from "@connectapp/mail";
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireTeamMember } from "@/lib/admin";
+import { factorIsFresh, presentCode } from "@/lib/two-step";
 
 export interface Done {
   error?: string;
+  /**
+   * HRT-442, R1.8, R21.4. The code is wanted again before this one runs.
+   *
+   * Only ever "code" here. The portal refuses an operator who has not set
+   * two-step up at all, with no grace period, so there is no state in which
+   * somebody reaches one of these without a factor to present.
+   */
+  stepUp?: "code";
+}
+
+/**
+ * HRT-442, R1.8, R21.4. The guard on the presses that reach every church.
+ *
+ * The portal already requires a second factor to get in. This is the other
+ * question: whether the operator who presented it is still the one at the
+ * keyboard, two minutes later rather than fifty.
+ */
+async function stillYou(): Promise<Done | null> {
+  return (await factorIsFresh()) ? null : { stepUp: "code" };
 }
 
 const say = (error: unknown) =>
@@ -181,6 +201,10 @@ export async function restoreChurch(data: FormData): Promise<Done> {
 
 export async function revokeAdmin(userId: string): Promise<Done> {
   const who = await requireTeamMember();
+
+  /* R1.8, R21.4. Taking the portal off somebody, or putting it on them, is cross-church reach changing hands. */
+  const stop = await stillYou();
+  if (stop) return stop;
   try {
     await platform.revoke(who.id, userId);
     revalidatePath("/team");
@@ -204,6 +228,10 @@ export async function revokeAdmin(userId: string): Promise<Done> {
  */
 export async function inviteTeamMember(data: FormData): Promise<Done> {
   const who = await requireTeamMember();
+
+  /* R1.8, R21.4. An invitation to the portal is an invitation to every church's records. */
+  const stop = await stillYou();
+  if (stop) return stop;
   const email = String(data.get("email") ?? "");
   const name = String(data.get("name") ?? "");
 
@@ -276,6 +304,10 @@ export async function findTwoStep(
  */
 export async function clearTwoStep(userId: string, reason: string): Promise<Done> {
   const who = await requireTeamMember();
+
+  /* R1.8, R21.4. Taking an account's second factor off is the one press here that weakens somebody else's security. */
+  const stop = await stillYou();
+  if (stop) return stop;
   try {
     await platform.clearTwoStep(who.id, userId, reason);
     revalidatePath("/security");
@@ -283,4 +315,20 @@ export async function clearTwoStep(userId: string, reason: string): Promise<Done
   } catch (error) {
     return { error: say(error) };
   }
+}
+
+
+/**
+ * HRT-442, R1.8, R21.4. The code again, in front of a press that reaches
+ * every church.
+ *
+ * The same challenge the door makes, against the same factor, read from
+ * Supabase rather than taken from the form. What it changes is the `amr`
+ * timestamp on the token, which is what `factorIsFresh` reads, so the press
+ * behind the box can simply be repeated.
+ */
+export async function proveItIsStillYou(data: FormData): Promise<Done> {
+  await requireTeamMember();
+  const result = await presentCode(String(data.get("code") ?? ""));
+  return result.error ? { error: result.error } : {};
 }

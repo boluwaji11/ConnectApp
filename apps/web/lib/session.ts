@@ -73,8 +73,44 @@ export const currentUser = cache(async () => {
      * navigation asks Supabase for it.
      */
     assurance: typeof claims["aal"] === "string" ? (claims["aal"] as string) : "aal1",
+    /*
+     * R1.8, R21.4. When this session last presented a second factor.
+     *
+     * `amr` names each method that got this session in, with the second it
+     * happened. Presenting a code again on a session that already has one
+     * moves the `totp` entry's timestamp rather than adding another, which is
+     * what makes a step-up readable here instead of being held somewhere of
+     * our own. Verified against a real project: a second challenge thirty-two
+     * seconds later moved the entry by thirty-two seconds.
+     *
+     * Null where nothing was presented, which is every password-only session.
+     */
+    factorAt: factorPresentedAt(claims["amr"]),
   };
 });
+
+/** The kinds of `amr` entry that count as a second factor. */
+const SECOND_FACTOR = new Set(["totp", "webauthn", "mfa/totp", "mfa/webauthn"]);
+
+/**
+ * The newest second factor on the token, in seconds, or null.
+ *
+ * The claim is whatever the authentication server put there, so every field is
+ * checked rather than trusted: a malformed entry reads as no factor, which is
+ * the refusing direction.
+ */
+function factorPresentedAt(amr: unknown): number | null {
+  if (!Array.isArray(amr)) return null;
+  let newest: number | null = null;
+  for (const entry of amr) {
+    if (!entry || typeof entry !== "object") continue;
+    const { method, timestamp } = entry as { method?: unknown; timestamp?: unknown };
+    if (typeof method !== "string" || !SECOND_FACTOR.has(method)) continue;
+    if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) continue;
+    if (newest === null || timestamp > newest) newest = timestamp;
+  }
+  return newest;
+}
 
 /**
  * R1.8. Whether this person has finished setting up two-step verification.

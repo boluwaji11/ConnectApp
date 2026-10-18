@@ -12,8 +12,9 @@ import { t } from "@connectapp/i18n";
 import { requireSession } from "@/lib/session";
 import { rememberChurch } from "@/lib/church-choice";
 import { explain } from "@/lib/explain";
+import { stepUpNeeded, type MayNeedStepUp } from "@/lib/step-up";
 
-export interface DomainResult {
+export interface DomainResult extends MayNeedStepUp {
   domain?: string | null;
   error?: string;
 }
@@ -22,6 +23,12 @@ export interface DomainResult {
 export async function saveDomain(domain: string): Promise<DomainResult> {
   try {
     const session = await requireSession();
+
+    /* R1.8, R21.4. The host a church answers at is what every member's
+       session is scoped to, so changing it is a change to the way in. */
+    const stop = await stepUpNeeded();
+    if (stop) return stop;
+
     const saved = await withTenant(
       {
         tenantId: session.tenantId,

@@ -5,7 +5,7 @@
  * marked "use client" actually name. Run `pnpm catalogue` after changing a
  * screen's words; CI fails if this file is stale.
  *
- * 3984 of 5658 keys.
+ * 3990 of 5664 keys.
  */
 import type { Catalogue } from "../core";
 
@@ -529,6 +529,12 @@ export const browserWords: Catalogue = {
   "twoStep.offConfirm": "Turn off two-step verification?",
   "twoStep.offConfirmBody": "Your account will be protected by your password alone, and your recovery codes will stop working. You can set it up again at any time.",
   "twoStep.staleHint": "If your authenticator app already lists ConnectApp for this address, that entry is an old one. Delete it, then scan this code again.",
+  "stepUp.title": "Enter your verification code",
+  "stepUp.lede": "This action affects your church's money, access or records, so we check it's still you.",
+  "stepUp.confirm": "Verify and continue",
+  "stepUp.setUpTitle": "Set up two-step verification first",
+  "stepUp.setUpLede": "This action needs two-step verification on your account.",
+  "stepUp.setUp": "Set up two-step verification",
   "settings.export.download": "Download",
   "place.title": "Where you meet",
   "place.campus": "Campus",

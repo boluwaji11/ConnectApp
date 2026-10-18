@@ -10,6 +10,7 @@ import { t } from "@connectapp/i18n";
 import { explain } from "@/lib/explain";
 import { requireSession } from "@/lib/session";
 import { stripe, stripeConfigured, stripeLive, asChurch } from "@/lib/stripe";
+import { stepUpNeeded, type MayNeedStepUp } from "@/lib/step-up";
 
 
 /**
@@ -35,7 +36,7 @@ function webAddress(given: string | null | undefined): string | undefined {
   }
 }
 
-export interface ConnectResult {
+export interface ConnectResult extends MayNeedStepUp {
   error?: string;
   /** Where to send the reader to carry on with Stripe. */
   url?: string;
@@ -95,6 +96,13 @@ async function origin(): Promise<string> {
 export async function connectStripe(): Promise<ConnectResult> {
   const { session, actor, ctx } = await context();
   if (!stripeConfigured()) return { error: "stripe.unconfigured" };
+
+  /*
+   * R1.8, R21.4. The link this returns is how the bank account that the
+   * church's giving settles into gets set, so it asks for the code again.
+   */
+  const stop = await stepUpNeeded();
+  if (stop) return stop;
 
   try {
     const existing = await withTenant(ctx, (tx) => getStripeAccount(tx));

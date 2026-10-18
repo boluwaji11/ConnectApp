@@ -12,8 +12,9 @@ import { requireSession, type Session } from "@/lib/session";
 import { churchOrigin } from "@/lib/church-address";
 import { inviteMessage } from "@/lib/invite-mail";
 import { sendAsPlatform } from "@/lib/transactional";
+import { stepUpNeeded, type MayNeedStepUp } from "@/lib/step-up";
 
-export interface TeamResult {
+export interface TeamResult extends MayNeedStepUp {
   error?: string;
   /**
    * HRT-370, R16.4. The invitation is written down and the message did not go.
@@ -87,6 +88,12 @@ async function allowed() {
 export async function invite(data: FormData): Promise<TeamResult> {
   try {
     const session = await allowed();
+
+    /* R1.8, R21.4. An invitation hands somebody a role, which is reach into
+       the church's records. Asked for again before it is sent. */
+    const stop = await stepUpNeeded();
+    if (stop) return stop;
+
     const email = field(data, "email").toLowerCase();
 
     if (!/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) return { error: t("team.error.email") };
@@ -222,6 +229,10 @@ export async function changeRole(
 ): Promise<TeamResult> {
   try {
     const session = await allowed();
+
+    /* R1.8, R21.4. Moving somebody between roles moves what they can read. */
+    const stop = await stepUpNeeded();
+    if (stop) return stop;
 
     /*
      * R1.4. An Owner's row is only an Owner's to change. Admin may run the

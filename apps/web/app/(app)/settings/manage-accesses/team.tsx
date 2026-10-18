@@ -21,6 +21,8 @@ import {
   invite, invitees, withdraw, changeRole, removeAccess, sendAgain,
 } from "./actions";
 import { ResizableTable } from "@/components/resizable-columns";
+import { StepUpDialog } from "@/components/step-up";
+import type { StepUp } from "@/lib/step-up";
 
 export interface ChurchRoleOption {
   id: string;
@@ -191,9 +193,16 @@ export function Team({
     if (!pending) setDoing(undefined);
   }, [pending]);
 
+  /*
+   * R1.8, R21.4. Changing a role is changing what somebody can read, so it
+   * asks for the code again and the same press is repeated once it has one.
+   */
+  const [need, setNeed] = React.useState<StepUp | null>(null);
+  const again = React.useRef<(() => void) | null>(null);
+
   const run = (
     key: string,
-    work: () => Promise<{ error?: string; unsent?: boolean; said?: string }>,
+    work: () => Promise<{ error?: string; unsent?: boolean; said?: string; stepUp?: StepUp }>,
     said?: string,
     /** HRT-370. Whose invitation this was, for the notice when it does not go. */
     email?: string,
@@ -201,6 +210,11 @@ export function Team({
     setDoing(key);
     startTransition(async () => {
       const result = await work();
+      if (result.stepUp) {
+        again.current = () => run(key, work, said, email);
+        setNeed(result.stepUp);
+        return;
+      }
       setError(result.error);
       if (result.unsent && email) setUnsent({ email, said: result.said });
       setMessage(result.error || result.unsent ? undefined : said);
@@ -210,6 +224,20 @@ export function Team({
 
   return (
     <div className="flex flex-col gap-6" aria-busy={pending}>
+      <StepUpDialog
+        need={need}
+        onDone={() => {
+          setNeed(null);
+          const waiting = again.current;
+          again.current = null;
+          waiting?.();
+        }}
+        onCancel={() => {
+          setNeed(null);
+          again.current = null;
+        }}
+      />
+
       {error ? <Banner tone="danger">{error}</Banner> : null}
       <Said message={message} onClose={() => setMessage(undefined)} />
 
@@ -636,6 +664,9 @@ export function InvitePerson({
   const [role, setRole] = React.useState(giveable[0]?.id ?? "");
   const [failed, setFailed] = React.useState<string>();
   const [saving, startTransition] = React.useTransition();
+  /* R1.8, R21.4. An invitation hands out a role, so the code is asked for in
+     front of it. The form stays open behind the box. */
+  const [needCode, setNeedCode] = React.useState<StepUp | null>(null);
 
   /*
    * R1.7. Most members a church gives an account to are already in People, with
@@ -690,6 +721,17 @@ export function InvitePerson({
 
   return (
     <>
+      <StepUpDialog
+        need={needCode}
+        onDone={() => {
+          setNeedCode(null);
+          /* The form is still filled in, so the one thing left is the press.
+             Submitted here rather than asking for it again. */
+          (document.getElementById(formId) as HTMLFormElement | null)?.requestSubmit();
+        }}
+        onCancel={() => setNeedCode(null)}
+      />
+
       {unsent ? (
         <Unsent email={unsent.email} said={unsent.said} onClose={() => setUnsent(null)} />
       ) : null}
@@ -725,6 +767,12 @@ export function InvitePerson({
             data.set("role", role);
             startTransition(async () => {
               const result = await invite(data);
+              if (result.stepUp) {
+                /* R1.8, R21.4. The form keeps what was typed, so the code box
+                   opens over it and the press is repeated. */
+                setNeedCode(result.stepUp);
+                return;
+              }
               setFailed(result.error);
               if (!result.error) {
                 /* HRT-370. The row is written either way, so the panel closes

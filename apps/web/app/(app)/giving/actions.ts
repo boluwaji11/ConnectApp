@@ -12,8 +12,9 @@ import { stripe, stripeConfigured, asChurch } from "@/lib/stripe";
 import { explain } from "@/lib/explain";
 import { requireSession } from "@/lib/session";
 import { churchNow } from "@/lib/church-now";
+import { stepUpNeeded, type MayNeedStepUp } from "@/lib/step-up";
 
-export interface GivingResult {
+export interface GivingResult extends MayNeedStepUp {
   error?: string;
   id?: string;
 }
@@ -154,6 +155,16 @@ export async function giveBack(
    */
   try {
     if (!canManageGiving(actor)) throw new PermissionError(actor.role, "recordGift");
+
+    /*
+     * R1.8, R21.4. The code again, before Stripe is told anything.
+     *
+     * Above the read and above the refund, for the same reason the permission
+     * check moved up here: once `refunds.create` has answered, the money has
+     * left the church's balance and nothing on this path puts it back.
+     */
+    const stop = await stepUpNeeded();
+    if (stop) return stop;
 
     const gift = await withTenant(ctx, (tx) => giftCharge(tx, id));
     if (!gift) return { error: "gift.error.missing" };

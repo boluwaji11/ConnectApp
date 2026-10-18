@@ -8,6 +8,7 @@ import {
   Field, IconButton, Input,
 } from "@connectapp/ui";
 import { inviteTeamMember, revokeAdmin, withdrawInvite } from "@/app/actions";
+import { useStepUp } from "@/app/step-up";
 
 export interface WaitingRow {
   id: string;
@@ -43,11 +44,19 @@ export function TeamMembers({
   const [dropping, setDropping] = React.useState<WaitingRow>();
   const [pending, startTransition] = React.useTransition();
 
+  /* HRT-442, R1.8, R21.4. Handing somebody the portal, and taking it away,
+     each ask for the code again before they run. */
+  const { go: askOn, dialog: askBox } = useStepUp(inviteTeamMember);
+  const { go: revokeOn, dialog: revokeBox } = useStepUp(revokeAdmin);
+
   const live = rows.filter((one) => !one.revoked);
   const gone = rows.filter((one) => one.revoked);
 
   return (
     <div className="flex flex-col gap-5" aria-busy={pending}>
+      {askBox}
+      {revokeBox}
+
       {error ? <Banner tone="danger" title="That didn't work">{error}</Banner> : null}
 
       <div className="flex justify-end">
@@ -61,7 +70,10 @@ export function TeamMembers({
               className="flex flex-col gap-4"
               action={(data) => {
                 startTransition(async () => {
-                  const result = await inviteTeamMember(data);
+                  const result = await askOn(data);
+                  /* Null means the code box was closed, so nothing happened
+                     and the form keeps what was typed into it. */
+                  if (!result) return;
                   setError(result.error);
                   if (!result.error) setOpen(false);
                   /* Refreshed either way. A refusal is often the list being
@@ -137,7 +149,8 @@ export function TeamMembers({
                 const who = losing;
                 if (!who) return;
                 startTransition(async () => {
-                  const result = await revokeAdmin(who.userId);
+                  const result = await revokeOn(who.userId);
+                  if (!result) return;
                   setError(result.error);
                   setLosing(undefined);
                   router.refresh();

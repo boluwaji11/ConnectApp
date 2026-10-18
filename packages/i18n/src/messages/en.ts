@@ -772,6 +772,15 @@ export const en = {
   "twoStep.staleHint": "If your authenticator app already lists ConnectApp for this address, that entry is an old one. Delete it, then scan this code again.",
   "twoStep.error.gone": "There is no authenticator set up on this account. Use a recovery code.",
   "twoStep.error.again": "Couldn't reach the verification service. Try again.",
+
+  /* R1.8, R21.4. The code asked for again, in front of something that moves
+     money, reach or records out of the church. */
+  "stepUp.title": "Enter your verification code",
+  "stepUp.lede": "This action affects your church's money, access or records, so we check it's still you.",
+  "stepUp.confirm": "Verify and continue",
+  "stepUp.setUpTitle": "Set up two-step verification first",
+  "stepUp.setUpLede": "This action needs two-step verification on your account.",
+  "stepUp.setUp": "Set up two-step verification",
   "twoStep.error.recovery": "That recovery code isn't right, or it has already been used.",
   "twoStep.error.password": "That isn't your password.",
   "settings.lede.export": "Download a copy of your church's data.",

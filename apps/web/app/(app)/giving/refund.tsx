@@ -11,6 +11,7 @@ import { groupAmount, money, toCents } from "@/lib/money";
 import { MoneyInput } from "@/components/money-input";
 import { useFormError } from "@/lib/form-error";
 import { giveBack } from "./actions";
+import { useStepUp } from "@/components/step-up";
 
 /**
  * R13.15. Giving a gift back.
@@ -35,6 +36,9 @@ export function RefundGift({
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [amount, setAmount] = React.useState("");
+  /* R1.8, R21.4. A refund moves real money, so the code is asked for again.
+     The amount stays on screen behind the box and the press is repeated. */
+  const { go, dialog } = useStepUp(giveBack);
   const [error, setError] = useFormError(open);
   const [pending, startTransition] = React.useTransition();
 
@@ -46,6 +50,8 @@ export function RefundGift({
 
   return (
     <>
+      {dialog}
+
       <IconButton
         label={t("giving.gift.refund")}
         variant="ghost"
@@ -96,7 +102,10 @@ export function RefundGift({
                   return;
                 }
                 startTransition(async () => {
-                  const result = await giveBack(gift.id, cents);
+                  const result = await go(gift.id, cents);
+                  /* Null means the code box was closed without an answer, so
+                     nothing happened and there is nothing to report. */
+                  if (!result) return;
                   setError(result.error);
                   if (!result.error) {
                     setOpen(false);

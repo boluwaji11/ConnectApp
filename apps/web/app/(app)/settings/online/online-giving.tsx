@@ -12,6 +12,8 @@ import { Steps, Step } from "@/components/steps";
 import type { ChurchStripeAccountRead } from "@connectapp/db";
 import type { AccountFace } from "./actions";
 import { connectStripe, refreshStripe } from "./actions";
+import { StepUpDialog } from "@/components/step-up";
+import type { StepUp } from "@/lib/step-up";
 import { NonprofitRate } from "./nonprofit-rate";
 
 /**
@@ -179,6 +181,9 @@ export function OnlineGiving({
    * reused, so pressing again replaces it rather than leaving another behind.
    */
   const [waiting, setWaiting] = React.useState(false);
+  /* R1.8, R21.4. The link this press returns is how the bank account the
+     church's giving settles into gets set. */
+  const [need, setNeed] = React.useState<StepUp | null>(null);
 
   const go = () => {
     /*
@@ -191,6 +196,19 @@ export function OnlineGiving({
 
     startTransition(async () => {
       const result = await connectStripe();
+      /*
+       * R1.8, R21.4. Asked for the code, so the tab goes and they press again.
+       *
+       * Not retried for them, deliberately. The tab above is opened while the
+       * browser is still answering the press; a tab opened after a dialog has
+       * no gesture behind it and every browser blocks it, which would be a
+       * button that does nothing.
+       */
+      if (result.stepUp) {
+        tab?.close();
+        setNeed(result.stepUp);
+        return;
+      }
       if (result.error) {
         tab?.close();
         setError(said(result.error));
@@ -233,6 +251,8 @@ export function OnlineGiving({
 
   return (
     <div className="flex max-w-[1120px] flex-col gap-4">
+      <StepUpDialog need={need} onDone={() => setNeed(null)} onCancel={() => setNeed(null)} />
+
       {/* R24.6. The account and the rate stand side by side and end level,
           because neither is a footnote to the other. */}
       <div className="grid items-stretch gap-5 xl:[grid-template-columns:minmax(0,1fr)_minmax(300px,380px)]">

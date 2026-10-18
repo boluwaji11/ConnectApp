@@ -8,6 +8,7 @@ import {
 import type { platform } from "@connectapp/db";
 import { Panel } from "@/components/screen";
 import { findTwoStep, clearTwoStep } from "@/app/actions";
+import { useStepUp } from "@/app/step-up";
 
 /**
  * HRT-441, R1.8, R21.4. The way back in for somebody locked out of two-step.
@@ -40,11 +41,17 @@ export function LockedOut() {
       setSearched(true);
     });
 
+  /* HRT-442, R1.8, R21.4. The one press here that weakens somebody else's
+     security, so the operator proves it is still them first. */
+  const { go: clearOn, dialog: codeBox } = useStepUp(clearTwoStep);
+
   const clear = () =>
     startTransition(async () => {
       if (!found) return;
       setError(undefined);
-      const result = await clearTwoStep(found.userId, reason);
+      const result = await clearOn(found.userId, reason);
+      /* Null means the code box was closed, so nothing happened. */
+      if (!result) return;
       if (result.error) return setError(result.error);
       setSaid(`Two-step verification is off for ${found.email}. They can set it up again.`);
       setAsking(false);
@@ -54,6 +61,8 @@ export function LockedOut() {
 
   return (
     <Panel className="flex flex-col gap-4">
+      {codeBox}
+
       {error ? <Banner tone="danger">{error}</Banner> : null}
       {said ? <Banner tone="success">{said}</Banner> : null}
 
