@@ -10,7 +10,21 @@ import { owner, withTenant, closeConnections } from "../src/client";
 import { withAuditTriggersOff, deleteTenantsLike } from "../src/maintenance";
 import { testTenant } from "./helpers/tenant";
 
-const OUR_FUNCTIONS = ["app_tenant_id", "app_role", "app_user_id", "audit_write"] as const;
+/**
+ * SEC-012. Every function we define in `public`, asked of the catalogue.
+ *
+ * This used to be the list the query filtered by *and* the list the coverage
+ * assertion compared against, so "covers every function we define in public"
+ * could only fail if one of four went missing and could never notice a fifth.
+ * `public` actually holds ten of ours, and the six the list omitted were
+ * exactly the six that fail the two assertions underneath it: the slug helpers
+ * pin no search_path, and two of the definer functions were pinned to
+ * `public, pg_catalog` rather than to nothing.
+ *
+ * Nothing is named here now. A function added by a later migration is in scope
+ * the day it is created, which is the same rule the audit trigger's coverage
+ * loop already follows.
+ */
 
 /**
  * The storage schema belongs to Supabase, so the bucket policies and the
@@ -32,7 +46,8 @@ beforeAll(async () => {
   functions = await owner()<{ name: string; config: string[] | null; definer: boolean }[]>`
     select p.proname as name, p.proconfig as config, p.prosecdef as definer
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public' and p.proname = any(${OUR_FUNCTIONS as unknown as string[]})`;
+    where n.nspname = 'public' and p.prokind = 'f'
+      and p.proname not like 'pg\_%'`;
 
 });
 
@@ -41,8 +56,11 @@ afterAll(async () => {
 });
 
 describe("function search_path is pinned", () => {
-  it("covers every function we define in public", () => {
-    expect(functions.map((f) => f.name).sort()).toEqual([...OUR_FUNCTIONS].sort());
+  it("finds the functions it is meant to be checking", () => {
+    /* A guard on the guard: a query that matched nothing would make both
+       assertions below pass while proving nothing at all. */
+    expect(functions.length).toBeGreaterThan(3);
+    expect(functions.map((f) => f.name)).toContain("app_tenant_id");
   });
 
   it("pins search_path on all of them", () => {
@@ -75,6 +93,85 @@ describe("no SECURITY DEFINER surface", () => {
         select has_function_privilege('hearth_app', ${`public.${fn}`}, 'execute') as ok`;
       expect(rows[0]?.ok, `hearth_app cannot call ${fn}`).toBe(true);
     }
+  });
+});
+
+/**
+ * SEC-010, SEC-011, SEC-012. The three findings the widened query above found,
+ * and the one it could not see.
+ */
+describe("the schema and its functions are not open to whoever connects", () => {
+  it("lets nobody but the owner create objects in public", async () => {
+    /* The precondition for shadowing anything a function resolves. Supabase's
+       own bootstrap grants the schema to these roles, so this is closed on
+       purpose rather than closed by default. */
+    for (const role of ["public", "anon", "authenticated", "hearth_app"]) {
+      const rows = await owner()<{ ok: boolean | null }[]>`
+        select has_schema_privilege(${role}, 'public', 'create') as ok`;
+      /* A role the database does not have answers null, which is not a grant. */
+      expect(rows[0]?.ok ?? false, `${role} can create in public`).toBe(false);
+    }
+  });
+
+  /*
+   * `information_schema.role_routine_grants` reports a PUBLIC grant with
+   * `grantee = 'PUBLIC'`, so the assertion further down that filters on
+   * `('anon','authenticated')` passed while anon held EXECUTE on five
+   * functions through PUBLIC. This asks the privilege itself.
+   */
+  it("lets anon and authenticated execute nothing in public, PUBLIC grants included", async () => {
+    const ours = await owner()<{ sig: string }[]>`
+      select p.oid::regprocedure::text as sig
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.prokind = 'f' and p.proname not like 'pg\_%'`;
+
+    expect(ours.length).toBeGreaterThan(3);
+
+    for (const role of ["anon", "authenticated"]) {
+      for (const { sig } of ours) {
+        const rows = await owner()<{ ok: boolean | null }[]>`
+          select has_function_privilege(${role}, ${sig}, 'execute') as ok`;
+        expect(rows[0]?.ok ?? false, `${role} can execute ${sig}`).toBe(false);
+      }
+    }
+  });
+
+  it("keeps the platform's own tables away from the application role", async () => {
+    const tables = await owner()<{ name: string }[]>`
+      select c.relname as name
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and c.relkind = 'r' and c.relname like 'platform\_%'`;
+
+    expect(tables.length).toBeGreaterThan(0);
+
+    for (const { name } of tables) {
+      for (const right of ["select", "insert", "update", "delete"]) {
+        const rows = await owner()<{ ok: boolean | null }[]>`
+          select has_table_privilege('hearth_app', ${`public.${name}`}, ${right}) as ok`;
+        expect(rows[0]?.ok ?? false, `hearth_app can ${right} ${name}`).toBe(false);
+      }
+    }
+  });
+
+  it("gives no platform table a tenant policy, however it is keyed", async () => {
+    /* `platform_events` carries a tenant_id, so it matched the policy loop and
+       was handed a tenant policy: a church's own session could read the
+       operator notes written about it and forge a row saying it was approved. */
+    const policies = await owner()<{ tablename: string; policyname: string }[]>`
+      select tablename, policyname from pg_policies
+       where schemaname = 'public' and tablename like 'platform\_%'`;
+    expect(policies).toEqual([]);
+  });
+
+  it("leaves row-level security on every platform table", async () => {
+    /* With no policy, RLS enabled is what denies the application role. Both
+       mechanisms, because the grant above is the one a blanket grant undid. */
+    const open = await owner()<{ name: string }[]>`
+      select c.relname as name
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and c.relkind = 'r'
+         and c.relname like 'platform\_%' and c.relrowsecurity = false`;
+    expect(open.map((r) => r.name)).toEqual([]);
   });
 });
 

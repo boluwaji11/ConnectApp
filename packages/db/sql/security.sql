@@ -24,9 +24,61 @@ end $$;
 
 alter role hearth_app nobypassrls;
 grant usage on schema public to hearth_app;
+
+/*
+ * SEC-010. Nobody creates objects in `public` but the role that owns it.
+ *
+ * This is the precondition for shadowing anything a function resolves, and
+ * Supabase's own bootstrap grants the whole schema to `anon`, `authenticated`
+ * and `service_role`, so it is satisfied by default rather than by accident.
+ * The functions above pin an empty search_path, which closes the same door from
+ * the other side; both are cheap and neither is sufficient alone, because the
+ * next function somebody writes may forget the pin.
+ */
+revoke create on schema public from public;
+do $$
+declare r text;
+begin
+  foreach r in array array['anon', 'authenticated', 'hearth_app'] loop
+    if exists (select 1 from pg_roles where rolname = r) then
+      execute format('revoke create on schema public from %I', r);
+    end if;
+  end loop;
+end $$;
 grant select, insert, update, delete on all tables in schema public to hearth_app;
 grant usage, select on all sequences in schema public to hearth_app;
 alter default privileges in schema public grant select, insert, update, delete on tables to hearth_app;
+
+/*
+ * SEC-011. The platform's own tables are not a church's.
+ *
+ * Migration 0095 revoked `platform_admins` and `platform_events` from
+ * `hearth_app`, and the blanket grant two lines above gave them straight back,
+ * because this file runs after every migration. The default privileges on the
+ * line above hand the next one over on creation too.
+ *
+ * `platform_events` carries a `tenant_id`, so it also matched the policy loop
+ * below and was given a tenant policy: a church's own session could then read
+ * every operator note written about that church, and write rows claiming it had
+ * been approved. The audit loop already exempts `platform\_%`; the policy loop
+ * did not, and nothing asserted either way.
+ *
+ * Taken back by pattern rather than by a list, so a table added later is
+ * covered without this block being edited.
+ */
+do $$
+declare t text;
+begin
+  for t in
+    select c.relname
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relkind = 'r' and c.relname like 'platform\_%'
+  loop
+    execute format('revoke all on public.%I from hearth_app', t);
+    execute format('alter table public.%I enable row level security', t);
+  end loop;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- 2. Tenant context helpers
@@ -35,11 +87,17 @@ alter default privileges in schema public grant select, insert, update, delete o
 -- tenant context returns no rows instead of an error that might get caught and
 -- swallowed. Silence is the safe failure here.
 --
--- Every function pins `search_path = ''`. Without it, anyone able to create an
+-- Every function pins a search_path. Without one, anyone able to create an
 -- object in a schema earlier in the path could shadow something the function
--- resolves, which is a privilege-escalation path rather than a style issue. With
--- an empty path, everything outside pg_catalog must be schema-qualified, so the
--- shadowing has nowhere to happen.
+-- resolves, which is a privilege-escalation path rather than a style issue.
+--
+-- The ones written here, and every SECURITY DEFINER function, pin `''`, so
+-- everything outside pg_catalog must be schema-qualified and the shadowing has
+-- nowhere to happen. Section 13 pins the handful that migrations created
+-- without one, to `public, pg_catalog`, because their bodies name tables
+-- unqualified; fixed rather than inherited is the property that matters there.
+-- Section 11 revokes CREATE on `public` from everybody but its owner, which
+-- closes the same door from the other side.
 
 create or replace function public.app_tenant_id() returns uuid
 language sql stable
@@ -96,6 +154,8 @@ begin
     join pg_namespace n on n.oid = c.relnamespace
     join pg_attribute a on a.attrelid = c.oid and a.attname = 'tenant_id' and a.attnum > 0
     where n.nspname = 'public' and c.relkind = 'r'
+      -- SEC-011. The platform's own, which no church reaches. See above.
+      and c.relname not like 'platform\_%'
   loop
     execute format('alter table public.%I enable row level security', t);
     execute format('alter table public.%I no force row level security', t);
@@ -514,7 +574,7 @@ begin
     returns boolean
     language sql
     security definer
-    set search_path = public, pg_catalog
+    set search_path = ''
     stable
     as $body$
       select exists (
@@ -658,7 +718,7 @@ begin
     returns boolean
     language sql
     security definer
-    set search_path = public, pg_catalog
+    set search_path = ''
     stable
     as $body$
       select exists (
@@ -703,4 +763,78 @@ begin
 
   -- Where it used to live, when it was also an RPC endpoint.
   execute 'drop function if exists public.user_in_church(text)';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 8. Function privileges in public, by pattern rather than by list
+-- ---------------------------------------------------------------------------
+-- SEC-012. A function created in Postgres carries EXECUTE for PUBLIC by
+-- default, and this file revoked that one function at a time. Five escaped the
+-- list: `hearth_slug`, `hearth_free_person_slug`, `hearth_free_report_slug`,
+-- `hearth_free_member_slug` and `hearth_free_mailer_slug`, all added by later
+-- migrations. The role-by-role revoke in section 9 cannot reach them, because
+-- revoking from `anon` does not remove a privilege `anon` holds through PUBLIC,
+-- so they stayed executable by anybody the database lets connect.
+--
+-- The exposure is small: each reads a tenant-scoped table as the invoker, and
+-- `anon` holds no SELECT there, so the call errors rather than answering. The
+-- defect is the list, which is a thing somebody forgets to add to. This is the
+-- same shape as the audit trigger's coverage loop: ask the catalogue.
+--
+-- hearth_app is granted EXECUTE on each in the same pass, which is what it
+-- held through PUBLIC a moment ago, so nothing it calls stops working.
+do $$
+declare f record;
+begin
+  for f in
+    select p.oid::regprocedure as sig
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.prokind = 'f'
+  loop
+    execute format('revoke all on function %s from public', f.sig);
+    if exists (select 1 from pg_roles where rolname = 'hearth_app') then
+      execute format('grant execute on function %s to hearth_app', f.sig);
+    end if;
+  end loop;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 9. Every function in public has a fixed search_path
+-- ---------------------------------------------------------------------------
+-- SEC-012. A function with no `search_path` of its own resolves names through
+-- whatever the calling session happens to have set. For a SECURITY DEFINER
+-- function that is escalation, and the three of those pin an empty path and
+-- schema-qualify everything. For a SECURITY INVOKER function it is narrower,
+-- since the body runs with the caller's own privileges, but a caller who sets a
+-- hostile path still redirects which table the function reads.
+--
+-- `campus_default` and the five slug helpers were created by migrations without
+-- one. They are pinned here rather than rewritten, and to `public, pg_catalog`
+-- rather than to the empty string, because their bodies name `members`,
+-- `saved_reports` and `mailers` unqualified: an empty path would pin them to
+-- failure instead of to safety. Fixed is the property that matters. Rewriting
+-- those bodies to qualify every name, and then pinning them to nothing like the
+-- rest, is HRT-425.
+--
+-- Anything created with a path already set is left exactly as it is, so this
+-- cannot quietly widen one of the three that pin nothing.
+do $$
+declare f record;
+begin
+  for f in
+    select p.oid::regprocedure as sig
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.prokind = 'f'
+       and p.proname not like 'pg\_%'
+       and (p.proconfig is null
+            or not exists (
+              select 1 from unnest(p.proconfig) as c where c like 'search\_path=%'
+            ))
+  loop
+    execute format('alter function %s set search_path = public, pg_catalog', f.sig);
+  end loop;
 end $$;
