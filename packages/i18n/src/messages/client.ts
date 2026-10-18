@@ -5,7 +5,7 @@
  * marked "use client" actually name. Run `pnpm catalogue` after changing a
  * screen's words; CI fails if this file is stale.
  *
- * 3983 of 5658 keys.
+ * 3984 of 5658 keys.
  */
 import type { Catalogue } from "../core";
 
@@ -513,6 +513,7 @@ export const browserWords: Catalogue = {
   "twoStep.codesCopy": "Copy codes",
   "twoStep.codesDownload": "Download codes",
   "twoStep.codesKept": "Finish setup",
+  "twoStep.done": "Two-step verification is on.",
   "twoStep.reissue": "Get new recovery codes",
   "twoStep.codesSection": "Recovery codes",
   "twoStep.codesInvalidate": "Generating a new set will invalidate your previous recovery codes.",
