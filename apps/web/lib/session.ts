@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import {
   membershipsForUser, resolveTenantByHost,
-  demoMembership,
+  demoMembership, twoStepFor,
   type Membership, type TenantRole, type Permission,
 } from "@connectapp/db";
 import { supabaseServer } from "./supabase/server";
@@ -66,8 +66,25 @@ export const currentUser = cache(async () => {
     fullName: text("full_name"),
     firstName: text("first_name"),
     lastName: text("last_name"),
+    /*
+     * R1.8. What this session has presented: `aal1` is a password or an email
+     * link, `aal2` is a second factor as well. It is a claim on the token that
+     * was verified two lines above, so reading it here costs nothing and no
+     * navigation asks Supabase for it.
+     */
+    assurance: typeof claims["aal"] === "string" ? (claims["aal"] as string) : "aal1",
   };
 });
+
+/**
+ * R1.8. Whether this person has finished setting up two-step verification.
+ *
+ * The mirror in `app_users`, not Supabase, because every request that resolves
+ * a session needs the answer and Supabase would be a round trip on every
+ * navigation. Read in the same breath as the memberships below, so it costs
+ * nothing either.
+ */
+const myTwoStep = cache(async (userId: string) => twoStepFor(userId));
 
 /**
  * R1.5. Whether this person has answered the email they signed up with.
@@ -248,7 +265,30 @@ export const requireSession = cache(async (asked?: string): Promise<Session> => 
     redirect(`/sign-in${nextFrom(await here())}`);
   }
 
-  const memberships = await myMemberships(user.id);
+  /*
+   * R1.8. Two reads with nothing to say to each other, so they go together.
+   */
+  const [memberships, twoStep] = await Promise.all([
+    myMemberships(user.id),
+    myTwoStep(user.id),
+  ]);
+
+  /*
+   * R1.8, R21.4. A session that has only presented a password is not finished.
+   *
+   * Enforced here rather than on the sign-in action, because a server action
+   * is one way in and a bookmark is another: somebody who closes the code
+   * screen and types an address would otherwise be inside. This is the same
+   * place the church and the spelling are settled, and for the same reason.
+   *
+   * The mirror decides only that a code is owed. The screen it sends them to
+   * reads the factors from Supabase, and lets them straight through where
+   * there is nothing to present.
+   */
+  if (twoStep.enrolledAt && user.assurance !== "aal2") {
+    redirect(`/sign-in/code${nextFrom(await here())}`);
+  }
+
   if (memberships.length === 0) redirect("/choose-church?reason=none");
 
   let chosen: Membership | undefined;

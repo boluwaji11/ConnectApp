@@ -218,6 +218,19 @@ create policy tenant_members_only on public.app_users
     )
   );
 
+-- R1.8. The recovery codes belong to a person, not to a church.
+--
+-- No tenant_id, so the policy loop never visits it, and that is the whole of
+-- the reason this block exists: the blanket grant in section 1 runs after every
+-- migration and hands back whatever a migration revoked. SEC-011 was that
+-- mistake on the platform's own tables.
+--
+-- Read and written only on the owner connection, before a tenant context
+-- exists, the same way a membership is. RLS on with no policy means the
+-- application role sees nothing even if a grant is restored by accident.
+alter table public.account_recovery_codes enable row level security;
+revoke all on public.account_recovery_codes from hearth_app;
+
 -- ---------------------------------------------------------------------------
 -- 4. Confidential notes
 -- ---------------------------------------------------------------------------

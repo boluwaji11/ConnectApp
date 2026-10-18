@@ -336,9 +336,48 @@ export const appUsers = pgTable(
      * phone.
      */
     theme: text("theme"),
+    /**
+     * R1.8. When they finished setting up two-step verification, or null.
+     *
+     * Supabase holds the factor itself. This is a mirror of the one fact every
+     * request needs: whether a session that has only presented a password is
+     * finished. Asking Supabase costs a round trip on every navigation, and
+     * this is read in the same breath as the memberships.
+     *
+     * A mirror can drift, so the screen that acts on it checks the factors
+     * themselves before it refuses anybody, and clears this where Supabase
+     * says there is nothing to present.
+     */
+    mfaEnrolledAt: timestamp("mfa_enrolled_at", { withTimezone: true }),
     createdAt: created(),
   },
   (t) => [uniqueIndex("app_users_email_key").on(t.email)],
+);
+
+/**
+ * R1.8. The way back in when the phone is gone.
+ *
+ * Ten codes, shown once at enrolment and never again. Only the hash is kept,
+ * so this table being read gives nobody a way in, and a code is spent the
+ * first time it works.
+ *
+ * It belongs to a person rather than to a church, so it carries no tenant_id
+ * and gets no tenant policy. It is read before a tenant context exists, on the
+ * owner connection, the same way a membership is. RLS is on with no policy and
+ * the application role is revoked outright: nothing in a request path reaches
+ * it.
+ */
+export const accountRecoveryCodes = pgTable(
+  "account_recovery_codes",
+  {
+    id: pk(),
+    userId: uuid("user_id").notNull().references(() => appUsers.id, { onDelete: "cascade" }),
+    /** SHA-256 of the code, lowercased and stripped of its separator. */
+    codeHash: text("code_hash").notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: created(),
+  },
+  (t) => [index("account_recovery_codes_user_idx").on(t.userId)],
 );
 
 /**

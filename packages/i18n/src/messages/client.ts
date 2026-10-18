@@ -5,7 +5,7 @@
  * marked "use client" actually name. Run `pnpm catalogue` after changing a
  * screen's words; CI fails if this file is stale.
  *
- * 3914 of 5546 keys.
+ * 3941 of 5590 keys.
  */
 import type { Catalogue } from "../core";
 
@@ -461,6 +461,33 @@ export const browserWords: Catalogue = {
   "email.sent": "Check both inboxes. The change takes effect once you confirm it.",
   "email.error.same": "You already use that email address.",
   "email.error.format": "Enter an email address.",
+  "twoStep.row": "Two-step verification",
+  "twoStep.off": "Off",
+  "twoStep.on": "On",
+  "twoStep.turnOn": "Turn on",
+  "twoStep.turnOff": "Turn off",
+  "twoStep.scan": "Scan this QR code to set up your account using your preferred authenticator app.",
+  "twoStep.apps": "Popular choices include Google Authenticator, Microsoft Authenticator and Authy.",
+  "twoStep.manual": "Enter code manually instead",
+  "twoStep.manualHide": "Scan the QR code instead",
+  "twoStep.secret": "Setup key",
+  "twoStep.copied": "Copied",
+  "twoStep.next": "Next",
+  "twoStep.enterLede": "Your authenticator app shows a new six-digit code every 30 seconds.",
+  "twoStep.code": "Six-digit code",
+  "twoStep.confirm": "Confirm",
+  "twoStep.codesLede": "These are the way back in if you lose your phone. Each one works once, and this is the only time they are shown.",
+  "twoStep.codesCopy": "Copy codes",
+  "twoStep.codesDownload": "Download",
+  "twoStep.codesKept": "I have saved them",
+  "twoStep.codesLeft.one": "{count} recovery code left",
+  "twoStep.codesLeft.other": "{count} recovery codes left",
+  "twoStep.reissue": "Get new recovery codes",
+  "twoStep.useRecovery": "Use a recovery code instead",
+  "twoStep.useApp": "Use your authenticator app instead",
+  "twoStep.recoveryLabel": "Recovery code",
+  "twoStep.recoveryLede": "Enter one of the codes you saved when you set this up. It will be used up, and two-step verification will be turned off so you can set it up again.",
+  "twoStep.password": "Your password",
   "settings.export.download": "Download",
   "place.title": "Where you meet",
   "place.campus": "Campus",

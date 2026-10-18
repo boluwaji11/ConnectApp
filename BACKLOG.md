@@ -1139,6 +1139,8 @@ of money and after everything else.
 | HRT-434 | What an operator read, not only what they changed | R1.11, R21.3 | Open |
 | HRT-435 | Append-only enforced in the database, not by the absence of a writer | R1.11, R8.x | Open |
 | HRT-436 | The station forgets a church when it is signed out of | R8.20, R21.2 | Open |
+| HRT-437 | Two-step verification: enrolment, the challenge at sign-in, and recovery codes | R1.8, R21.4 | Resolved |
+| HRT-438 | Two-step required of the roles that hold reach, and on the operator portal | R1.8, R21.4 | Open |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |

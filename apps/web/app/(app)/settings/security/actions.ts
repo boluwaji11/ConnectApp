@@ -1,11 +1,13 @@
 "use server";
 
 import { headers } from "next/headers";
-import { t } from "@connectapp/i18n";
+import { t, type MessageKey } from "@connectapp/i18n";
 import { requireSession } from "@/lib/session";
 import { safeOrigin } from "@/lib/safe-redirect";
 import { supabaseServer } from "@/lib/supabase/server";
 import { explainAuth } from "@/lib/auth-errors";
+import { beginEnrolment, finishEnrolment, turnOffEverything } from "@/lib/two-step";
+import { issueRecoveryCodes } from "@connectapp/db";
 
 export interface PasswordResult {
   error?: string;
@@ -78,4 +80,70 @@ export async function emailMeALink(): Promise<PasswordResult> {
     redirectTo: `${site}/reset`,
   });
   return error ? { error: explainAuth(error) } : {};
+}
+
+/**
+ * R1.8, R21.4. Starting two-step verification.
+ *
+ * Supabase holds the secret and draws the QR code. The secret reaches the
+ * screen that shows it and goes no further: it is not written down, not
+ * logged, and not carried in the session. An abandoned attempt leaves an
+ * unverified factor behind, which `beginEnrolment` clears on the way in.
+ */
+export async function startTwoStep(): Promise<
+  { factorId: string; qr: string; secret: string } | { error: string }
+> {
+  await requireSession();
+  const started = await beginEnrolment();
+  return "error" in started ? { error: t(started.error as MessageKey) } : started;
+}
+
+/**
+ * R1.8. The first code out of their app, which finishes it.
+ *
+ * The recovery codes come back with it and are shown once. They are issued
+ * here rather than on a later screen so that there is no state in which
+ * two-step is on and the person has no way back in.
+ */
+export async function confirmTwoStep(
+  factorId: string,
+  code: string,
+): Promise<{ codes: string[] } | { error: string }> {
+  const session = await requireSession();
+  const done = await finishEnrolment(session.userId, factorId, code);
+  return "error" in done ? { error: t(done.error as MessageKey) } : done;
+}
+
+/**
+ * R1.8. Turning it off, which asks for the password first.
+ *
+ * Same reasoning as the two changes above: an open session is a laptop
+ * somebody walked away from, and taking the second factor off is the change
+ * that makes every other one easier.
+ */
+export async function stopTwoStep(data: FormData): Promise<PasswordResult> {
+  const session = await requireSession();
+  if (!(await withPassword(session.email, field(data, "password")))) {
+    return { error: t("twoStep.error.password") };
+  }
+
+  await turnOffEverything(session.userId);
+  return {};
+}
+
+/**
+ * R1.8. A fresh set of recovery codes, replacing whatever is left.
+ *
+ * Asked for by somebody who has used some of theirs, or who has lost the
+ * piece of paper. The old set stops working the moment this answers.
+ */
+export async function newRecoveryCodes(data: FormData): Promise<
+  { codes: string[] } | { error: string }
+> {
+  const session = await requireSession();
+  if (!(await withPassword(session.email, field(data, "password")))) {
+    return { error: t("twoStep.error.password") };
+  }
+
+  return { codes: await issueRecoveryCodes(session.userId) };
 }

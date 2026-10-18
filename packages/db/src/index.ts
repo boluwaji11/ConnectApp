@@ -176,6 +176,10 @@ export {
   type Membership, type TeamMember, type PendingInvitation, type InvitationToSend,
 } from "./repo/membership";
 export {
+  twoStepFor, markTwoStepOn, markTwoStepOff, issueRecoveryCodes, spendRecoveryCode,
+  RECOVERY_CODE_COUNT, type TwoStepState,
+} from "./repo/two-step";
+export {
   churchForSelfSignup, joinChurch, setSelfSignup,
   type JoinTarget, type JoinOutcome,
 } from "./repo/joining";

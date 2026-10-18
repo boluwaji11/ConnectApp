@@ -4,6 +4,37 @@ An engineering handoff for implementing multifactor authentication. Written
 during the October 2026 security review, which deliberately did not implement
 any of it.
 
+## What has since been built (HRT-437, 18 October 2026)
+
+Step 2 of the rollout below is done: **two-step verification is available to
+anybody and required of nobody.**
+
+- **The factor is Supabase's TOTP.** `/settings/security` holds a card that
+  enrols, shows Supabase's own QR, offers the setup key for typing by hand, and
+  takes the first code out of the app.
+- **Recovery codes are ours**, because this Supabase version has none. Ten
+  codes, issued at enrolment in the same call that turns two-step on, hashed
+  with SHA-256 and spent once. `packages/db/src/repo/two-step.ts`.
+- **The gate is in `requireSession`**, not on the sign-in action, so a bookmark
+  is refused the same way a form is. A session at `aal1` whose mirror says
+  enrolled goes to `/sign-in/code` and reaches nothing else.
+- **The mirror is `app_users.mfa_enrolled_at`**, read beside the memberships so
+  no navigation asks Supabase.
+- **A recovery code turns two-step off** rather than letting one session
+  through. Supabase raises the assurance level only for the factor itself, and
+  the factor is on the phone that is gone.
+
+**One defect worth keeping in mind**, found by driving the flow in a browser
+and fixed before it shipped: the factor list was collapsed to an empty array
+when Supabase could not be reached, and the challenge screen read an empty list
+as "the factor is gone", cleared the mirror and let the person through. A
+failed read must never be allowed to disable a second factor.
+`apps/web/tests/two-step.test.ts` is that bug.
+
+**Still to do: step 1, step 3 and step 4 below.** The operator portal has no
+MFA, no role is required to enrol, and there is no step-up. HRT-438 carries
+them.
+
 R1.8 says password auth plus TOTP, **mandatory for Owner, Admin and Finance**.
 R21.4 repeats it. PRD section 13.9 records TOTP as one of the reasons Supabase
 was chosen, so the mechanism is bought rather than built.
