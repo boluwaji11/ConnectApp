@@ -174,7 +174,13 @@ export function TwoStep({
               to type the key by hand, and then the first code from the app. */}
           {!isOn && stage.at === "off" ? (
             <div className="flex flex-col items-start gap-4">
-              <p className="text-sm text-muted-foreground">{t("twoStep.apps")}</p>
+              {/* What it does, then what it needs. A card that opened on a
+                  list of app names said which key to buy without saying what
+                  the lock was for. */}
+              <div className="flex flex-col gap-1.5">
+                <p className="text-fg">{t("twoStep.lede")}</p>
+                <p className="text-sm text-muted-foreground">{t("twoStep.apps")}</p>
+              </div>
               <Button type="button" onClick={begin} loading={pending} disabled={pending}>
                 {t("twoStep.turnOn")}
               </Button>
