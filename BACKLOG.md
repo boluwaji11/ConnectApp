@@ -1146,6 +1146,7 @@ of money and after everything else.
 | HRT-441 | An owner who loses their phone can be let back in, by an operator | R1.8, R21.4 | Resolved |
 | HRT-442 | A fresh factor for the nine actions that move money, reach or data | R1.8, R21.4 | Open |
 | HRT-443 | Passkeys turned on: the Supabase setting, then PASSKEYS_ENABLED | R1.8 | Open |
+| HRT-444 | The church's own record is refused, not merely hidden from the menu | R1.1, R21.2 | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |

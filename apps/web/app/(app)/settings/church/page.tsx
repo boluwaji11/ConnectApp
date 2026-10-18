@@ -3,6 +3,7 @@ import {
   primaryCampus,
 } from "@connectapp/db";
 import { requireSession } from "@/lib/session";
+import { Denied } from "@/components/denied";
 import { ChurchSections } from "./sections";
 import { ChurchLogo } from "../logo";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -29,6 +30,19 @@ export default async function SettingsPage({
 }) {
   const {} = await searchParams;
   const session = await requireSession();
+
+  /*
+   * R1.1, R21.2. The church's own record is not open to everybody in it.
+   *
+   * The menu has always hidden this from a role without `church.manage`, and
+   * hiding a link is not a check: typing the address rendered the legal name,
+   * the address, the phone number, the email and the timezone to any member
+   * of the church. Every other screen in this section refuses; this one
+   * refused only the editing.
+   */
+  if (!canManageChurch(session)) {
+    return <Denied role={session.role} action="editChurch" church={session.tenantSlug} />;
+  }
 
   const { profile, campus } = await withTenant(
     { tenantId: session.tenantId, role: session.role },

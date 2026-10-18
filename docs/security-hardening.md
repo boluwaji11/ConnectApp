@@ -200,3 +200,24 @@ than `href`" survives a payload that is inert; "the output does not contain
 **Pure rules live in their own file** so they can be tested without a database
 or a browser. `apps/web` had no test harness at all until this review, which is
 why several pure functions on security boundaries had never been run.
+
+## Hiding a link is not a check
+
+HRT-444. The settings menu is built from the reader's permissions, so a role
+without `church.manage` never sees About. `/settings/church` relied on that:
+it used the permission to decide whether the fields were editable and read the
+record either way, so typing the address showed any member of the church its
+legal name, address, phone number, email and timezone.
+
+Every other screen in that section already refused. This one refused only the
+editing, which is the same mistake as a server action that trusts the screen
+not to draw a button.
+
+**A screen that reads more than the reader's own records refuses before it
+reads.** Not after: a refusal that runs second has already fetched the record
+it was meant to withhold.
+
+`apps/web/tests/settings-gates.test.ts` walks every settings screen and fails
+on one that reads the church and refuses nobody. Two screens are named in it
+as deliberate exceptions, `profile` and `security`, because those are a
+person's own account and a permission check on either would be wrong.
