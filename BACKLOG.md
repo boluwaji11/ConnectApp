@@ -1148,6 +1148,10 @@ of money and after everything else.
 | HRT-443 | Passkeys turned on: the Supabase setting, then PASSKEYS_ENABLED | R1.8 | Open |
 | HRT-444 | The church's own record is refused, not merely hidden from the menu | R1.1, R21.2 | Resolved |
 | HRT-445 | A seeded account gets the record the member screens read | R3.x, R17.4 | Resolved |
+| HRT-446 | Pastoral can write a note, which is most of what pastoral does | R2.7, R6.2 | Resolved |
+| HRT-447 | The record panel reads as four transactions, not eighteen round trips | R24.11, R24.12 | Resolved |
+| HRT-448 | Every screen pays a round trip per read, because nothing pipelines | R24.11, R24.12 | Open |
+| HRT-449 | The settings menu sticks under the environment bar, not behind it | R24.6 | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |

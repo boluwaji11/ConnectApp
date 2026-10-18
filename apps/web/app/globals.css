@@ -14,6 +14,19 @@
 }
 
 /*
+ * R24.6. The same distance, measured from under the environment bar.
+ *
+ * The bar below pushes every top-pinned header down by its own height and did
+ * not touch this, so the settings menu stuck 32px too high and spent every
+ * scroll tucked behind the header it is supposed to sit under. Declared on
+ * `body` because that is where `--env-bar` is set: a `calc` on `:root` would
+ * substitute the fallback and never see it.
+ */
+body {
+  --d-topbar: calc(63px + var(--env-bar, 0px));
+}
+
+/*
  * R24.x. Anything pressable shows the hand.
  *
  * Tailwind v4 stopped setting this, so a button reverts to the arrow the

@@ -15,6 +15,7 @@ build/
 .next-dev-verify/
 .next-turbo/
 .next-ci/
+/apps/web/.next-perf/
 out/
 *.tsbuildinfo
 

@@ -41,6 +41,20 @@ export const CAN_ARCHIVE_PEOPLE: readonly TenantRole[] = rolesWith("members.arch
 export const CAN_MANAGE_HOUSEHOLDS: readonly TenantRole[] = rolesWith("members.households");
 
 export const canEditPeople = (role: Who): boolean => can(role, "members.edit");
+
+/**
+ * R2.7, R6.2. Who may write a note about somebody.
+ *
+ * Two different errands reach the same box. Staff who keep the record write
+ * down what happened; pastoral care writes down a visit. Pastoral holds
+ * `members.notes.confidential` and not `members.edit`, so gating the note on
+ * editing people took the note away from the role whose work it mostly is.
+ *
+ * Which tier a note may be written at is still decided separately: a general
+ * note from either, a confidential one only from whoever can read one back.
+ */
+export const canWriteNotes = (role: Who): boolean =>
+  can(role, "members.edit") || can(role, "members.notes.confidential");
 /** R16.9. Whoever answers what members write to the church. */
 export const canAnswerMessages = (role: Who): boolean => can(role, "messages.office");
 export const canArchivePeople = (role: Who): boolean => can(role, "members.archive");

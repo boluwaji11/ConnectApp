@@ -5,14 +5,15 @@ import { Pencil } from "lucide-react";
 import {
   withTenant, getPerson, householdFor,
   personTimeline, servingForPerson, groupsForPerson,
-  listContacts, listAddresses, givingForPerson, getChurch,
+  listContacts, listAddresses, givingForPerson,
   listCustomFields, getCustomValues, listTags, listTagsForPerson, listCampuses,
-  canEditPeople, canArchivePeople, canReadGivingAmounts, anniversaryOf,
+  canEditPeople, canArchivePeople, canReadGivingAmounts, canWriteNotes, anniversaryOf,
   checksFor, canSeeChecks, listMilestones,
 } from "@connectapp/db";
 import { Avatar, Button, Tooltip } from "@connectapp/ui";
 import { t, plural } from "@connectapp/i18n";
 import { requireSession } from "@/lib/session";
+import { shellData } from "@/lib/shell-data";
 import { photoUrls } from "@/lib/photos";
 import { lifecycleLabel, maritalOptions } from "@/lib/person-input";
 import { longDate, shortDate } from "@/lib/dates";
@@ -170,34 +171,76 @@ export async function PersonPanelPage({
   const returnTo = memberDirectoryReturnTo(rawReturnTo);
   const session = await requireSession();
 
-  const result = await withTenant({ tenantId: session.tenantId, role: session.role }, async (tx) => {
-    const person = await getPerson(tx, id, { role: session.role, userId: session.userId });
-    if (!person) return null;
+  /*
+   * R24.11. The frame around this panel has already read the church, and the
+   * clock this record is filed on comes out of it. Reading it again inside the
+   * transaction was a round trip for a timezone that every read below waited
+   * behind, on a panel whose whole job is to open quickly from the list.
+   */
+  const zone = (await shellData(session)).church?.timezone ?? "America/Chicago";
+  const year = churchNow(zone).date.slice(0, 4);
 
-    // Found by their readable address or by their id, so everything after this
-    // works from the record's own id rather than from whatever was in the URL.
-    const memberId = person.id;
+  const ctx = { tenantId: session.tenantId, role: session.role };
+  const where = <T,>(work: (tx: Parameters<Parameters<typeof withTenant<T>>[1]>[0]) => Promise<T>) =>
+    withTenant(ctx, work);
 
-    // Record sections use the person's id for their related reads.
-    /*
-     * R1.5. Giving amounts are a field-level permission, so the read itself
-     * is skipped rather than the number being hidden on the way out.
-     */
-    const amounts = canReadGivingAmounts(session);
-    const zone = (await getChurch(tx, session.tenantId))?.timezone ?? "America/Chicago";
-    const year = churchNow(zone).date.slice(0, 4);
+  /*
+   * R1.5. Giving amounts are a field-level permission, so the read itself is
+   * skipped rather than the number being hidden on the way out.
+   */
+  const amounts = canReadGivingAmounts(session);
 
-    const [
-      contacts, addresses, household, groups, serving, history, giving,
-      customFields, customValues, memberTags, allTags, campuses, anniversary, milestoneRows, checkStanding,
-    ] = await Promise.all([
+  /*
+   * R24.11, R24.12. The record's reads run as several transactions at once.
+   *
+   * This was one transaction wrapping a `Promise.all` of eighteen reads, on
+   * the assumption that issuing them together meant answering them together.
+   * It does not. Drizzle sends every statement through postgres.js's `unsafe`,
+   * which refuses to pipeline anything but a statement the connection has
+   * already parsed, and each of these is different from the last. Measured: a
+   * query repeated eight times costs 30ms for all eight, and eight different
+   * queries cost 406ms, which is one round trip each. The `Promise.all` was
+   * drawing a straight line and calling it a fan.
+   *
+   * So the fan is made out of connections instead. Each group is its own
+   * tenant transaction, which costs one connection and about 180ms of BEGIN,
+   * `set_config` and COMMIT, and the groups are balanced so no one of them is
+   * much longer than the others. The person's own record is resolved first
+   * because the address may carry a readable name rather than an id, and
+   * everything after it reads from the record's own id.
+   *
+   * Three extra connections per record against a pool of ten. That is the
+   * trade: a panel somebody is waiting on, against connections a church is
+   * not otherwise using while they wait.
+   */
+  const person = await where((tx) =>
+    getPerson(tx, id, { role: session.role, userId: session.userId }),
+  );
+
+  // Not found and not permitted are the same response on purpose. A person in
+  // another church must not be distinguishable from a person who does not exist.
+  if (!person) notFound();
+
+  // Found by their readable address or by their id, so everything after this
+  // works from the record's own id rather than from whatever was in the URL.
+  const memberId = person.id;
+
+  const [
+    [contacts, addresses, household],
+    history,
+    [groups, serving, giving, customValues, memberTags, anniversary, milestoneRows, checkStanding],
+    [customFields, allTags, campuses],
+  ] = await Promise.all([
+    where(async (tx) => [
       // R2.4. Every way of reaching them, not only the one that leads.
-      listContacts(tx, memberId),
-      listAddresses(tx, memberId),
-      householdFor(tx, memberId),
-      groupsForPerson(tx, memberId),
-      servingForPerson(tx, memberId),
-      // R2.15. Everything that has happened with this person, in one order.
+      await listContacts(tx, memberId),
+      await listAddresses(tx, memberId),
+      await householdFor(tx, memberId),
+    ] as const),
+
+    // R2.15. Everything that has happened with this person, in one order. It
+    // reads six tables one after another, so it travels on its own.
+    where((tx) =>
       personTimeline(
         tx,
         { tenantId: session.tenantId, role: session.role, userId: session.userId, permissions: session.permissions },
@@ -206,38 +249,35 @@ export async function PersonPanelPage({
            filed under the evening it happened. */
         { timezone: zone },
       ),
+    ),
+
+    where(async (tx) => [
+      await groupsForPerson(tx, memberId),
+      await servingForPerson(tx, memberId),
       amounts
-        ? givingForPerson(tx, memberId, { from: `${year}-01-01`, to: `${year}-12-31` })
-        : Promise.resolve(null),
-      /* R1.10. Whatever this church decided a person needs. It was on the
-         form and in the directory and nowhere on the record itself. */
-      listCustomFields(tx, "person"),
-      getCustomValues(tx, "person", memberId),
-      listTagsForPerson(tx, memberId),
-      /* R1.13. Every tag this church keeps, so one can be put on or taken off
-         from the record itself. */
-      listTags(tx),
-      listCampuses(tx),
-      anniversaryOf(tx, memberId),
+        ? await givingForPerson(tx, memberId, { from: `${year}-01-01`, to: `${year}-12-31` })
+        : null,
+      await getCustomValues(tx, "person", memberId),
+      await listTagsForPerson(tx, memberId),
+      await anniversaryOf(tx, memberId),
       /* R2.6, R2.10. The dates a church is asked for and cannot produce, and
          the check that decides whether somebody may serve with children. */
-      listMilestones(tx, memberId),
-      canSeeChecks(session) ? checksFor(tx, session, memberId) : Promise.resolve(null),
-    ]);
+      await listMilestones(tx, memberId),
+      canSeeChecks(session) ? await checksFor(tx, session, memberId) : null,
+    ] as const),
 
-    return {
-      person, contacts, addresses, household, groups, serving, history, giving,
-      customFields, customValues, memberTags, allTags, campuses, anniversary, milestoneRows, checkStanding,
-    };
-  });
-
-  // Not found and not permitted are the same response on purpose. A person in
-  // another church must not be distinguishable from a person who does not exist.
-  if (!result) notFound();
-  const {
-    person, contacts, addresses, household, groups, serving, history, giving,
-    customFields, customValues, memberTags, allTags, campuses, anniversary, milestoneRows, checkStanding,
-  } = result;
+    /* What the church holds rather than what this person holds, so it waits
+       for nothing and travels beside the rest. */
+    where(async (tx) => [
+      /* R1.10. Whatever this church decided a person needs. It was on the
+         form and in the directory and nowhere on the record itself. */
+      await listCustomFields(tx, "person"),
+      /* R1.13. Every tag this church keeps, so one can be put on or taken off
+         from the record itself. */
+      await listTags(tx),
+      await listCampuses(tx),
+    ] as const),
+  ]);
 
   /* R1.10. Every custom field configured by the church has a place on the record. */
   const extra = customFields
@@ -482,7 +522,7 @@ export async function PersonPanelPage({
                 floating under it. */}
             <RecordPart title={t("timeline.title")}>
               <Timeline entries={history} />
-              {canEdit ? (
+              {canWriteNotes(session) ? (
                 <NoteForm
                   inline
                   memberId={person.id}

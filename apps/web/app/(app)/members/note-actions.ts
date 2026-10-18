@@ -1,6 +1,6 @@
 "use server";
 
-import { withTenant, createNote, canEditPeople, canReadConfidentialNotes } from "@connectapp/db";
+import { withTenant, createNote, canWriteNotes, canReadConfidentialNotes } from "@connectapp/db";
 import { t } from "@connectapp/i18n";
 import { explain } from "@/lib/explain";
 import { requireSession } from "@/lib/session";
@@ -18,6 +18,10 @@ const field = (data: FormData, name: string) => String(data.get(name) ?? "").tri
  * roles that may read one, which is a narrower list than the roles that may
  * write a general note. Somebody who cannot read confidential notes cannot
  * write one either: a note nobody can open again is not a record.
+ *
+ * R6.2. The gate is `canWriteNotes`, not `canEditPeople`. Pastoral holds the
+ * confidential tier and does not edit people, so the narrower gate refused the
+ * role that writes most of these.
  */
 export async function addNote(data: FormData): Promise<NoteResult> {
   const session = await requireSession();
@@ -27,7 +31,7 @@ export async function addNote(data: FormData): Promise<NoteResult> {
   const confidential = field(data, "classification") === "confidential";
 
   if (!body) return { error: t("notes.error.empty") };
-  if (!canEditPeople(session)) return { error: t("forbidden.denied") };
+  if (!canWriteNotes(session)) return { error: t("forbidden.denied") };
   if (confidential && !canReadConfidentialNotes(session)) {
     return { error: t("forbidden.denied") };
   }

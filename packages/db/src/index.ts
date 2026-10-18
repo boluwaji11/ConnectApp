@@ -10,7 +10,7 @@ export {
   can, rolesWith, canReadConfidentialNotes, canReadGivingAmounts, canManageGiving,
   canManageHouseholds, CAN_MANAGE_HOUSEHOLDS,
   CAN_READ_CONFIDENTIAL_NOTES, CAN_READ_GIVING_AMOUNTS,
-  canEditPeople, canArchivePeople, canAnswerMessages,
+  canEditPeople, canArchivePeople, canAnswerMessages, canWriteNotes,
   CAN_EDIT_PEOPLE, CAN_ARCHIVE_PEOPLE, PermissionError,
   needsTwoStep, TWO_STEP_PERMISSIONS,
   type PermissionAction,

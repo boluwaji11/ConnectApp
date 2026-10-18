@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PERMISSIONS, PERMISSION_GROUPS, ROLE_PERMISSIONS, TENANT_ROLES, can, rolesWith,
   canEditPeople, canArchivePeople, canReadConfidentialNotes, canReadGivingAmounts,
+  canWriteNotes,
 } from "../src/roles";
 import { canManageHouseholds } from "../src/roles";
 import { canManageChurch } from "../src/repo/church";
@@ -131,5 +132,34 @@ describe("a role a church wrote itself", () => {
   it("falls back to the matrix when the role carries no set of its own", () => {
     expect(can({ role: "staff", permissions: null }, "members.edit")).toBe(true);
     expect(can({ role: "member", permissions: null }, "members.edit")).toBe(false);
+  });
+});
+
+describe("writing a note about somebody", () => {
+  /*
+   * R2.7, R6.2. Pastoral is the role that writes most of these and it does not
+   * edit people. Gating the note on `members.edit` left it with no way to write
+   * one down, which is what this guards against coming back.
+   */
+  it("is open to pastoral, who does not edit people", () => {
+    expect(canEditPeople("pastoral")).toBe(false);
+    expect(canWriteNotes("pastoral")).toBe(true);
+  });
+
+  it("is open to everybody who edits people", () => {
+    for (const role of ["owner", "admin", "staff"] as const) {
+      expect(canWriteNotes(role)).toBe(true);
+    }
+  });
+
+  it("is refused to a plain member and to the volunteer roles", () => {
+    for (const role of ["member", "checkin_volunteer", "group_leader", "team_leader"] as const) {
+      expect(canWriteNotes(role)).toBe(false);
+    }
+  });
+
+  it("follows a church's own role, not the enum beside it", () => {
+    expect(canWriteNotes({ role: "member", permissions: ["members.notes.confidential"] })).toBe(true);
+    expect(canWriteNotes({ role: "member", permissions: ["checkin.run"] })).toBe(false);
   });
 });

@@ -111,6 +111,12 @@ Counted per page: the dashboard seven, the directory six, a person's page six,
 their edit panel eight, the check-in board five plus one roster per room in a
 loop.
 
+**That measurement was right about the order and wrong about the reason.** See
+"Promise.all is not a fan" below, measured on 18 October 2026 against the
+hosted development database. Issuing reads together still beats issuing them in
+source order, because the second batch no longer waits on the first, but it
+does not make them travel together.
+
 ### Supabase Auth, once per request
 
 `currentUser()` calls `supabase.auth.getUser()`, which is a live HTTPS request
@@ -304,3 +310,55 @@ be, and the button has said "Signing out" with a spinner throughout.
 a dialog it had not opened, then falling through to a catch that opened it. The
 request log showed the POST firing at the very end. A number that surprising is
 usually the harness.
+
+
+## Promise.all is not a fan, 18 October 2026
+
+Measured against the hosted development database, where one round trip costs
+about 60ms. On a laptop beside a local Postgres this is invisible, which is how
+it stayed hidden.
+
+**What was believed:** `Promise.all` of several drizzle reads inside one
+`withTenant` transaction sends them together and pays one round trip.
+
+**What happens:** drizzle's postgres-js driver sends every statement through
+`client.unsafe()`, and postgres.js will only pipeline a statement the
+connection has already parsed. `unsafe` sets `prepare: false` on the query, so
+nothing is ever cached and every distinct statement waits for its own Parse,
+Describe and Bind before the next one is written.
+
+```
+the same read, eight times, in turn:      224ms
+the same read, eight times, together:      30ms
+eight different reads, together:          406ms
+```
+
+The first two lines are what the earlier measurement saw. The third is what
+every screen in this product actually does, because no two of its reads are the
+same statement. Setting `prepare: true` on the client does not change it: the
+option is overridden per query by `unsafe`.
+
+**What this costs.** The member record panel, opened from the directory, read
+eighteen tables inside one transaction and took 1665ms to do it: one round trip
+each, plus about 180ms for BEGIN, `set_config` and COMMIT.
+
+```
+getPerson           60 ms      personTimeline     464 ms
+listCustomFields    62 ms      givingForPerson     85 ms
+listTags            30 ms      getCustomValues     59 ms
+listCampuses        29 ms      listTagsForPerson   55 ms
+listContacts       116 ms      anniversaryOf       56 ms
+listAddresses       58 ms      listMilestones      57 ms
+householdFor       183 ms      groupsForPerson     59 ms
+                               servingForPerson    58 ms
+```
+
+**What was done about it (HRT-447).** The panel resolves the person first,
+because the address may carry a readable name rather than an id, and then runs
+four tenant transactions at once, balanced so no group is much longer than the
+others. Each costs a connection and its own BEGIN, and the pool is ten.
+
+The deeper fix is to stop needing eighteen round trips, either by merging reads
+into single statements or by giving the driver a path that pipelines. That is
+HRT-448, and it is worth more than anything else in this file: it is a tax on
+every screen, not on this one.
