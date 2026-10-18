@@ -39,6 +39,7 @@ export function ChurchSections({
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(240px,1fr)]">
         <ChurchForm
           values={values}
+          campus={campus}
           canEdit={canEdit}
           logo={logo}
           editing={editing}

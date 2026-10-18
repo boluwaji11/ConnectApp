@@ -1,10 +1,9 @@
 import { requireSession } from "@/lib/session";
-import { Security } from "./security";
-import { TwoStep } from "./two-step";
 import { twoStepFor } from "@connectapp/db";
 import { relyingParty } from "@/lib/passkey";
 import { presentable } from "@/lib/two-step";
 import { SecurityOverview } from "./overview";
+import { SecurityCards } from "./cards";
 import { t } from "@connectapp/i18n";
 import { tabMetadata } from "@/lib/page-metadata";
 
@@ -51,16 +50,18 @@ export default async function SecurityPage() {
         <p className="mt-1 text-fg-muted">{t("settings.lede.security")}</p>
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)] lg:gap-0 lg:divide-x lg:divide-line">
+      <div className="lg:pr-6">
       <SecurityOverview
         email={session.email}
         twoStepOn={twoStep.enrolledAt !== null}
         codesLeft={twoStep.codesLeft}
       />
+      </div>
 
-      <div className="flex flex-col gap-4">
-        <Security email={session.email} />
-        <TwoStep
+      <div className="lg:pl-6">
+        <SecurityCards
+          email={session.email}
           enrolled={twoStep.enrolledAt !== null}
           codesLeft={twoStep.codesLeft}
           passkey={passkey}

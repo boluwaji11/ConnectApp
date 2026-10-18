@@ -147,15 +147,19 @@ export function TwoStep({
   codesLeft,
   passkey,
   passkeyHeld: heldAtFirst,
+  open,
+  onOpen,
 }: {
   enrolled: boolean;
   codesLeft: number;
+  /** Decided above, so opening this shuts whichever card was open. */
+  open: boolean;
+  onOpen: (to: boolean) => void;
   /** Null where a passkey cannot be bound to one of our own names. */
   passkey: RelyingParty | null;
   /** Whether what is protecting this account is a passkey rather than an app. */
   passkeyHeld?: boolean;
 }) {
-  const [open, setOpen] = React.useState(false);
   const [stage, setStage] = React.useState<Stage>({ at: "shut" });
   const [manual, setManual] = React.useState(false);
   const [code, setCode] = React.useState("");
@@ -264,12 +268,21 @@ export function TwoStep({
       <SettingCard
         icon={<ShieldCheck />}
         title={t("twoStep.row")}
+        /* The codes are counted in the overview rail beside this, so the
+           card's own line says what is protecting the account and no more. */
         lede={
           isOn
-            ? `${t("twoStep.on")} · ${plural("twoStep.codesLeft", left)}`
+            ? (passkeyHeld ? t("twoStep.summaryPasskey") : t("twoStep.summaryApp"))
             : t("twoStep.off")
         }
-        onPress={() => setOpen((was) => !was)}
+        action={
+          isOn ? (
+            <span className="rounded-full bg-success-soft px-2.5 py-0.5 text-[12px] font-semibold text-success-text">
+              {t("twoStep.on")}
+            </span>
+          ) : undefined
+        }
+        onPress={() => onOpen(!open)}
         expanded={open}
       >
         {open ? (

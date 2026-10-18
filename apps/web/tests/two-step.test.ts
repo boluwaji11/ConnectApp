@@ -58,9 +58,19 @@ describe("a factor list that could not be read", () => {
 });
 
 describe("a factor list that was read", () => {
+  /*
+   * `data.all` is the whole list. The per-kind arrays hold only the verified
+   * factors, so reading `data.totp` made an abandoned enrolment invisible:
+   * nothing could clear it, they accumulated on real accounts, and Supabase
+   * refuses enrolment once a user reaches its limit. These cases read the
+   * shape the API actually returns.
+   */
   it("names the verified factor, which is the one a challenge is made against", async () => {
     listFactors.mockResolvedValue({
-      data: { totp: [{ id: "f1", status: "verified" }] },
+      data: {
+        all: [{ id: "f1", status: "verified", factor_type: "totp" }],
+        totp: [{ id: "f1", status: "verified" }],
+      },
       error: null,
     });
     const { presentableFactor } = await load();
@@ -69,15 +79,48 @@ describe("a factor list that was read", () => {
 
   it("never names an unverified one, so an abandoned enrolment cannot be presented", async () => {
     listFactors.mockResolvedValue({
-      data: { totp: [{ id: "f1", status: "unverified" }] },
+      data: { all: [{ id: "f1", status: "unverified", factor_type: "totp" }], totp: [] },
       error: null,
     });
     const { presentableFactor } = await load();
     expect(await presentableFactor()).toBeNull();
   });
 
+  it("still sees an abandoned enrolment, which is what lets it be cleared", async () => {
+    listFactors.mockResolvedValue({
+      data: { all: [{ id: "f1", status: "unverified", factor_type: "totp" }], totp: [] },
+      error: null,
+    });
+    const { factors } = await load();
+    expect((await factors()).held).toEqual([{ id: "f1", kind: "totp", verified: false }]);
+  });
+
+  it("does not read an empty per-kind array as an empty account", async () => {
+    listFactors.mockResolvedValue({
+      data: {
+        all: [
+          { id: "a", status: "unverified", factor_type: "totp" },
+          { id: "b", status: "unverified", factor_type: "totp" },
+        ],
+        totp: [],
+      },
+      error: null,
+    });
+    const { factors } = await load();
+    expect((await factors()).held).toHaveLength(2);
+  });
+
+  it("names a passkey as well as an app", async () => {
+    listFactors.mockResolvedValue({
+      data: { all: [{ id: "p1", status: "verified", factor_type: "webauthn" }], totp: [] },
+      error: null,
+    });
+    const { presentable } = await load();
+    expect(await presentable()).toEqual({ known: true, totp: null, passkey: "p1" });
+  });
+
   it("says there is nothing when the list really is empty", async () => {
-    listFactors.mockResolvedValue({ data: { totp: [] }, error: null });
+    listFactors.mockResolvedValue({ data: { all: [], totp: [] }, error: null });
     const { presentableFactor } = await load();
     expect(await presentableFactor()).toBeNull();
   });

@@ -48,19 +48,31 @@ export const factors = cache(async (): Promise<{ held: Factor[] | null }> => {
   const supabase = await supabaseServer();
   const { data, error } = await supabase.auth.mfa.listFactors();
   if (error || !data) return { held: null };
-  /* Both kinds, because a person may hold either and the screens offer both. */
-  const all = [
-    ...(data.totp ?? []).map((one) => ({ one, kind: "totp" as const })),
-    ...((data as unknown as { webauthn?: { id: string; status: string }[] }).webauthn ?? [])
-      .map((one) => ({ one, kind: "webauthn" as const })),
-  ];
+  /*
+   * `data.all`, not `data.totp`.
+   *
+   * The per-kind arrays hold only the verified factors; `all` holds every
+   * factor including an enrolment that was started and never finished. Reading
+   * the per-kind arrays meant the cleanup below never saw an abandoned
+   * attempt, so they accumulated: an account that had opened the setup box a
+   * few times and walked away was carrying four of them, and Supabase refuses
+   * enrolment once a user reaches its limit. Nothing said so, because nothing
+   * could see them.
+   */
+  const everything = (data.all ?? []) as unknown as {
+    id: string;
+    status: string;
+    factor_type: string;
+  }[];
 
   return {
-    held: all.map(({ one, kind }) => ({
-      id: one.id,
-      kind,
-      verified: one.status === "verified",
-    })),
+    held: everything
+      .filter((one) => one.factor_type === "totp" || one.factor_type === "webauthn")
+      .map((one) => ({
+        id: one.id,
+        kind: one.factor_type === "webauthn" ? ("webauthn" as const) : ("totp" as const),
+        verified: one.status === "verified",
+      })),
   };
 });
 
@@ -110,9 +122,7 @@ export async function beginEnrolment(): Promise<Enrolment | { error: string }> {
   const supabase = await supabaseServer();
 
   for (const one of (await factors()).held ?? []) {
-    if (!one.verified && one.kind === "totp") {
-      await supabase.auth.mfa.unenroll({ factorId: one.id });
-    }
+    if (!one.verified) await supabase.auth.mfa.unenroll({ factorId: one.id });
   }
 
   const { data, error } = await supabase.auth.mfa.enroll({

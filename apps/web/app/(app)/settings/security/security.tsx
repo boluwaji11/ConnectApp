@@ -21,8 +21,16 @@ import { useAnswered } from "@/components/form-actions";
  * strength of an open session, and an open session is a laptop somebody walked
  * away from.
  */
-export function Security({ email }: { email: string }) {
-  const [open, setOpen] = React.useState<"email" | "password" | null>(null);
+export function Security({
+  email,
+  open,
+  onOpen,
+}: {
+  email: string;
+  /** Which card is open, decided above so only one ever is. */
+  open: "email" | "password" | null;
+  onOpen: (which: "email" | "password" | null) => void;
+}) {
   const [error, setError] = useFormError(open);
   const [message, setMessage] = React.useState<string>();
   const [pending, startTransition] = React.useTransition();
@@ -47,7 +55,7 @@ export function Security({ email }: { email: string }) {
       setError(result.error);
       if (!result.error) {
         setMessage(said);
-        setOpen(null);
+        onOpen(null);
       }
     });
   };
@@ -55,7 +63,7 @@ export function Security({ email }: { email: string }) {
   const toggle = (which: "email" | "password") => {
     setError(undefined);
     setMessage(undefined);
-    setOpen((was) => (was === which ? null : which));
+    onOpen(open === which ? null : which);
   };
 
   return (

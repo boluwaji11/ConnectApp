@@ -12,6 +12,7 @@ import {
 import { Said } from "@/components/said";
 import { FieldHint } from "@/components/field-hint";
 import { saveChurch } from "./actions";
+import { renameSite } from "./church/places-actions";
 import { Details, Detail } from "./card";
 
 export interface ChurchValues {
@@ -49,6 +50,7 @@ export function ChurchForm({
   logo,
   editing,
   onEditing,
+  campus,
 }: {
   values: ChurchValues;
   canEdit: boolean;
@@ -57,6 +59,8 @@ export function ChurchForm({
   /** Held by the page, because the pencil here opens every section. */
   editing: boolean;
   onEditing: (next: boolean) => void;
+  /** R1.2. The one campus, saved with the rest rather than on its own. */
+  campus?: { id: string; name: string } | null;
 }) {
   const [timezone, setTimezone] = React.useState(values.timezone);
   const [country, setCountry] = React.useState(values.country || "US");
@@ -85,9 +89,22 @@ export function ChurchForm({
     data.set("region", region);
     startTransition(async () => {
       const result = await saveChurch(data);
-      setError(result.error);
-      setSaved(Boolean(result.saved));
-      if (!result.error) onEditing(false);
+
+      /*
+       * R1.2. The campus rides this form, so it is saved with it.
+       *
+       * Only when it has actually been changed: a church that edits its
+       * address should not write to campuses as well.
+       */
+      const site = String(data.get("campusName") ?? "").trim();
+      const siteError =
+        campus && site && site !== campus.name
+          ? (await renameSite(campus.id, site)).error
+          : undefined;
+
+      setError(result.error ?? siteError);
+      setSaved(Boolean(result.saved) && !siteError);
+      if (!result.error && !siteError) onEditing(false);
       /* R24.6. The form now shows what the server holds, whichever way the
          save went, so Save goes back to waiting for a change. */
       formSettled("church-form");

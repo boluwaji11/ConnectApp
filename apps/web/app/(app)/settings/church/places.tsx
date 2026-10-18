@@ -1,11 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import { Banner, Field, Input } from "@connectapp/ui";
+import { Field, Input } from "@connectapp/ui";
 import { t } from "@connectapp/i18n";
 import type { Campus } from "@connectapp/db";
-import { renameSite } from "./places-actions";
 
 /**
  * R1.2. Where this church meets.
@@ -28,35 +26,27 @@ export function Places({
   /** Driven by the pencil on Details, so one press opens the whole page. */
   editing: boolean;
 }) {
-  const router = useRouter();
-  const [error, setError] = React.useState<string>();
-  const [site, setSite] = React.useState(campus?.name ?? "");
-  const [pending, startTransition] = React.useTransition();
-
   if (!campus) return null;
 
-  const save = () =>
-    startTransition(async () => {
-      const result = await renameSite(campus.id, site);
-      setError(result.error);
-      if (!result.error) router.refresh();
-    });
-
   return (
-    <section
-      className="flex flex-col gap-3 rounded-[14px] border border-line bg-surface p-5"
-      aria-busy={pending}
-    >
-      {error ? <Banner tone="danger">{error}</Banner> : null}
-
+    <section className="flex flex-col gap-3 rounded-[14px] border border-line bg-surface p-5">
       <span className="font-semibold text-fg">{t("place.title")}</span>
 
       {editing && canEdit ? (
+        /*
+         * R24.6. This box belongs to the church form beside it.
+         *
+         * It used to save itself on blur, so Save changes never noticed it had
+         * been typed in and stayed greyed out while the screen clearly held an
+         * edit. `form` associates an input with a form it is not inside:
+         * `new FormData(form)` picks it up, which is what the dirty check
+         * reads, and it is submitted with everything else.
+         */
         <Field label={t("place.campus")} required>
           <Input
-            value={site}
-            onChange={(e) => setSite(e.target.value)}
-            onBlur={save}
+            name="campusName"
+            form="church-form"
+            defaultValue={campus.name}
             autoComplete="off"
           />
         </Field>
