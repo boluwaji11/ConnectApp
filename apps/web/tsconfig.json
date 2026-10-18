@@ -21,11 +21,12 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    ".next-ci/types/**/*.ts",
     ".next-dev-verify/types/**/*.ts",
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-ci/types/**/*.ts"
+    ".next-sec/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

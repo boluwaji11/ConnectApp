@@ -38,27 +38,52 @@ export async function middleware(request: NextRequest) {
 
   const { data } = await supabase.auth.getUser();
 
+  /*
+   * HRT-306, SEC-020. The portal is for the operators and nothing frames it.
+   *
+   * Written here rather than imported from the product, because the two apps
+   * deploy separately and the portal's answer is the simple one: nothing it
+   * serves is ever embedded, so there is no route rule to get wrong.
+   */
+  const stamp = <T extends NextResponse>(answer: T): T => {
+    answer.headers.set(
+      "Content-Security-Policy",
+      "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+    );
+    answer.headers.set("X-Frame-Options", "DENY");
+    answer.headers.set("X-Content-Type-Options", "nosniff");
+    answer.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+    answer.headers.set("Strict-Transport-Security", "max-age=63072000");
+    return answer;
+  };
+
   const path = request.nextUrl.pathname;
   /*
    * The door itself, the route the cron calls, which carries its own secret
    * and has no session to carry, and the two halves of an invitation link,
    * which are walked by somebody who has no session yet and is about to get
    * one (HRT-401).
+   *
+   * SEC-021. The cron route is named rather than matched by prefix. `/api/` as
+   * a prefix opened a whole namespace that sits outside the `(portal)` route
+   * group, so it has no layout gate either: a second API route added here would
+   * be reachable with no session and no platform_admins check unless its author
+   * remembered both. There is one, and it carries its own bearer.
    */
   const open =
     path === "/sign-in" ||
     path === "/join" ||
     path.startsWith("/auth/") ||
-    path.startsWith("/api/");
+    path === "/api/health";
 
   if (!data.user && !open) {
     const away = request.nextUrl.clone();
     away.pathname = "/sign-in";
     away.search = "";
-    return NextResponse.redirect(away);
+    return stamp(NextResponse.redirect(away));
   }
 
-  return response;
+  return stamp(response);
 }
 
 export const config = {

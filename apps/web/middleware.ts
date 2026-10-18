@@ -5,6 +5,7 @@ import { AUTH_BUDGET_MS, budgetedFetch } from "@/lib/budget";
 import { DEV_PASS, gated, openInDev, passHolds } from "@/lib/dev-gate";
 import { backTo, DEMO_ENTRY, isDemoHost } from "@/lib/demo-host";
 import { DEMO_COOKIE } from "@/lib/demo-pass-name";
+import { securityHeaders } from "@/lib/security-headers";
 
 /**
  * Refreshes the Supabase session on every request, because a Server Component
@@ -29,6 +30,21 @@ export async function middleware(request: NextRequest) {
   const asked = new Headers(request.headers);
   asked.set("x-pathname", request.nextUrl.pathname);
   asked.set("x-search", request.nextUrl.search);
+
+  /*
+   * HRT-306, SEC-020. Stamped on whatever this returns.
+   *
+   * Every path out of here is a response somebody's browser renders: the
+   * ordinary one, the demo's redirect, the gate's redirect. A header set on
+   * only one of them is a header the other two do not have, and the one that
+   * matters most is on a redirect to sign-in.
+   */
+  const stamp = <T extends NextResponse>(answer: T): T => {
+    for (const [name, value] of Object.entries(securityHeaders(request.nextUrl.pathname))) {
+      answer.headers.set(name, value);
+    }
+    return answer;
+  };
 
   let response = NextResponse.next({ request: { headers: asked } });
 
@@ -77,9 +93,9 @@ export async function middleware(request: NextRequest) {
          else is where they were already going. */
       const going = pathname === "/" ? "/dashboard" : pathname + request.nextUrl.search;
       const away = backTo(request.headers, `${DEMO_ENTRY}?next=${encodeURIComponent(going)}`);
-      return NextResponse.redirect(away);
+      return stamp(NextResponse.redirect(away));
     }
-    return response;
+    return stamp(response);
   }
 
   /*
@@ -94,11 +110,11 @@ export async function middleware(request: NextRequest) {
       const away = request.nextUrl.clone();
       away.pathname = "/dev-gate";
       away.search = `?next=${encodeURIComponent(request.nextUrl.pathname + request.nextUrl.search)}`;
-      return NextResponse.redirect(away);
+      return stamp(NextResponse.redirect(away));
     }
   }
 
-  return response;
+  return stamp(response);
 }
 
 export const config = {
