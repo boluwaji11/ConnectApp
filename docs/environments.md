@@ -319,3 +319,27 @@ Two things a visitor presses for themselves rather than finding made: the
 website, where the builder's own gallery shows the feature better than a site
 made in the data layer, and messaging, which needs credentials a demo church
 deliberately does not have.
+
+## Secrets on Vercel
+
+Every value that grants access to something is stored **sensitive** rather than
+encrypted: the deployment reads it, and nobody with access to the project can
+read it back, in the dashboard or through the API. Vercel flags an encrypted
+secret as needing attention for exactly that reason.
+
+That is 27 variables on `connectapp` and 17 on `connectapp-admin`, set on
+18 October 2026. What is left readable is the part that is not a secret: the
+publishable keys, the Supabase URL, the hostnames, the Resend OAuth client id,
+the address mail is sent from, and the VAPID public half.
+
+**Keep a copy somewhere else.** A sensitive value cannot be read back, so
+`NOTE_ENCRYPTION_KEY` and `PROVIDER_CREDENTIAL_KEY` in particular belong in a
+password manager as well: they decrypt what is already in the database, and a
+lost key is lost pastoral notes and lost provider credentials, not an
+inconvenience.
+
+**Marking them sensitive is not rotation.** Vercel offers to rotate at the
+source, which means issuing a new key at Stripe or Supabase and replacing it
+here. That is worth doing when a value may have been seen by somebody who
+should not have seen it. None of these has been, so they were not rotated, and
+rotating for its own sake buys nothing and risks an outage.

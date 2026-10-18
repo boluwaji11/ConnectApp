@@ -1119,6 +1119,7 @@ of money and after everything else.
 | HRT-414 | A refund made in Stripe's own dashboard never reaches the gift | R13.15, R13.9 | Resolved |
 | HRT-415 | The repeating gifts tile did not say the figure was a month | R13.3 | Resolved |
 | HRT-416 | demo.connectapp.church, the whole product on invented records | R19.7, R22.1 | Resolved |
+| HRT-417 | Every secret on Vercel is write only | R21.3 | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |
@@ -4508,6 +4509,28 @@ dashboard refund actually raises.
 Five tests in `giving.test.ts` hold it: a refund the product never issued, four deliveries of one
 refund leaving the total at one refund, a second refund followed by one the bank refused, a figure
 larger than the gift, and another church's account.
+
+### HRT-417, secrets that could be read back
+
+Vercel marks an environment variable holding a secret as needing attention when
+it is stored encrypted rather than sensitive: encrypted means the deployment can
+read it and so can anybody with access to the project, in the dashboard or
+through the API. Forty-four of them were, across the two projects, including
+both database URLs, the Stripe secret key, the webhook signing secrets, the note
+and provider encryption keys, and the cron and dev gate secrets.
+
+They are sensitive now, which is write only. The values were not changed, so
+nothing needed redeploying and nothing broke; every value was read out to a
+local backup first, because a sensitive value cannot be read back afterwards.
+
+What is still readable is what is not a secret: publishable keys, the Supabase
+URL, hostnames, the Resend OAuth client id, the from address, the VAPID public
+half.
+
+**Not rotated.** Vercel's prompt offers rotation at the source, which means
+issuing a new key at Stripe or Supabase. That is the answer when a value may
+have been seen by the wrong person. None of these has been, and rotating for its
+own sake buys nothing and risks an outage.
 
 ### HRT-416, the demo becomes a place rather than a button
 
