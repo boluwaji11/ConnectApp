@@ -133,7 +133,17 @@ const TABLES = [
   "email_templates",
   "email_sends",
   "email_recipients",
-  "platform_events",
+  /*
+   * SEC-011. `platform_events` is not here any more.
+   *
+   * It is the platform's own append-only log, and the rows carry the operator's
+   * name and the free text they typed while approving, unapproving or archiving
+   * this church. That is our record of a decision rather than the church's
+   * record of itself, and the application role is now denied the table
+   * outright, so reading it here would have been a contradiction as well as a
+   * disclosure. A church that wants its own approval history should be given it
+   * on purpose rather than through `select *`.
+   */
   "audit_entries",
 ] as const;
 

@@ -78,7 +78,11 @@ describe("what comes out", () => {
           from pg_class c
           join pg_namespace n on n.oid = c.relnamespace
           join pg_attribute a on a.attrelid = c.oid and a.attname = 'tenant_id' and a.attnum > 0
-         where n.nspname = 'public' and c.relkind = 'r'`
+         where n.nspname = 'public' and c.relkind = 'r'
+           -- SEC-011. The platform's own log names the church an operator
+           -- acted on, which is not the same as being the church's record of
+           -- itself, and the application role is denied the table.
+           and c.relname not like 'platform\_%'`
     ).map((r) => r.relname);
 
     // Every table with a tenant_id must be in the export, plus tenants itself.
@@ -87,6 +91,7 @@ describe("what comes out", () => {
     const missing = tenantTables.filter((t) => !EXPORT_TABLES.includes(t as never));
     expect(missing).toEqual([]);
     expect(EXPORT_TABLES).toContain("tenants");
+    expect(EXPORT_TABLES).not.toContain("platform_events");
 
     for (const table of EXPORT_TABLES) {
       expect(archive.data[table], `${table} missing from the archive`).toBeDefined();

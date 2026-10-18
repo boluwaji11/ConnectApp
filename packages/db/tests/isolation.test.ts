@@ -41,6 +41,18 @@ beforeAll(async () => {
       join pg_namespace n on n.oid = c.relnamespace
       join pg_attribute a on a.attrelid = c.oid and a.attname = 'tenant_id' and a.attnum > 0
       where n.nspname = 'public' and c.relkind = 'r'
+        /*
+         * SEC-011. The platform's own tables are not a church's, even though
+         * platform_events carries a tenant_id to name the church an operator
+         * acted on. The application role is denied them outright rather than
+         * scoped to its own rows, which is a stronger property than anything
+         * this file asserts, and hardening.test.ts is where it is asserted.
+         *
+         * They used to be in this list, so the suite was requiring
+         * platform_events to have a tenant policy and passing once it had one.
+         * That is the finding written down as an expectation.
+         */
+        and c.relname not like 'platform\_%'
       order by c.relname`
   ).map((r) => r.relname);
 });
