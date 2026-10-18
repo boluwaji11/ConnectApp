@@ -123,8 +123,11 @@ export default async function ConnectedReport({
               <Link
                 href={`/reports/connected${here}`}
                 aria-current={want === undefined ? "page" : undefined}
+                /* R22.7. text-canvas, not text-bg: there is no `bg` colour, so
+                   that class did nothing and the chosen pill drew near-black
+                   words on a near-black fill. */
                 className={`rounded-full px-3 py-1.5 text-[13px] font-medium ${
-                  want === undefined ? "bg-fg text-bg" : "bg-sunken text-fg hover:bg-line"
+                  want === undefined ? "bg-fg text-canvas" : "bg-sunken text-fg hover:bg-line"
                 }`}
               >
                 {t("reports.connected.everybody")}
@@ -135,7 +138,7 @@ export default async function ConnectedReport({
                   href={`/reports/connected${here}&score=${at}`}
                   aria-current={want === at ? "page" : undefined}
                   className={`rounded-full px-3 py-1.5 text-[13px] font-medium ${
-                    want === at ? "bg-fg text-bg" : "bg-sunken text-fg hover:bg-line"
+                    want === at ? "bg-fg text-canvas" : "bg-sunken text-fg hover:bg-line"
                   }`}
                 >
                   {plural("reports.connected.band", at)} · {count}
