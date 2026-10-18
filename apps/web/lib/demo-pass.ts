@@ -15,7 +15,9 @@ import { cookies } from "next/headers";
  * a real church is refused twice.
  */
 
-const COOKIE = "hearth_demo";
+import { DEMO_COOKIE } from "./demo-pass-name";
+
+const COOKIE = DEMO_COOKIE;
 
 const secret = (): string => {
   const value = process.env["DEMO_PASS_SECRET"] ?? process.env["NOTE_ENCRYPTION_KEY"];

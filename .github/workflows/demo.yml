@@ -1,0 +1,36 @@
+# The demo's template, rebuilt each night.
+#
+# A visitor gets a copy of a template church, which is what makes the demo open
+# in under a second instead of forty. A copy carries the dates it was built
+# with, and the seed is written against the day it runs: a service happening
+# today, attendance behind it, a count from last weekend. Left alone for a week
+# the demo would show a check-in screen with nothing on today.
+#
+# So it is made again every night, before anybody in the United States is
+# likely to be looking at it.
+name: Rebuild the demo
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  # So it can be run by hand after the seed changes.
+  workflow_dispatch:
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build the template again
+        env:
+          SECRET: ${{ secrets.CRON_SECRET }}
+          SITE: ${{ vars.PLATFORM_URL || 'https://connectapp.church' }}
+        run: |
+          if [ -z "$SECRET" ]; then
+            echo "::error::CRON_SECRET is not set, so the demo cannot be rebuilt."
+            exit 1
+          fi
+          code=$(curl -s -o /tmp/demo.json -w "%{http_code}" --max-time 600 \
+            -H "Authorization: Bearer $SECRET" "$SITE/api/demo/refresh")
+          echo "answered $code"
+          cat /tmp/demo.json
+          [ "$code" = "200" ]

@@ -1,6 +1,6 @@
 import { owner, withTenant } from "../client";
 import { withAuditTriggersOff } from "../maintenance";
-import { loadDemoData } from "./load";
+import { loadDemoData, loadDemoExtras } from "./load";
 import { cloneTenant } from "./clone";
 
 /**
@@ -74,9 +74,14 @@ async function buildDemoChurch(
     insert into campuses (tenant_id, name, is_primary)
     values (${tenantId}, ${DEMO_NAME}, true)`;
 
-  await withTenant({ tenantId, role: "owner" }, (db) =>
-    loadDemoData(db, { tenantId, role: "owner" }),
-  );
+  await withTenant({ tenantId, role: "owner" }, async (db) => {
+    const actor = { tenantId, role: "owner" as const };
+    await loadDemoData(db, actor);
+    /* R19.7. Giving, the noticeboard, a form and the diary. Separate from the
+       loader above because that one can also be emptied out of a church again,
+       and these are only ever built into a church of our own. */
+    await loadDemoExtras(db, actor);
+  });
 
   return { tenantId, slug };
 }

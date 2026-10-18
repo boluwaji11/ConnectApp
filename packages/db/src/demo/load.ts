@@ -20,6 +20,11 @@ import { seedPipelines } from "../repo/followups";
 import { seedTeams, listTeams, getTeam, addToTeam } from "../repo/serving";
 import { PermissionError } from "../roles";
 import { InvalidInputError } from "../errors";
+import { writeFund } from "../repo/funds";
+import { openBatch, recordGift, closeBatch } from "../repo/giving";
+import { writeAnnouncement } from "../repo/announcements";
+import { createForm, addFormField, setFormStatus } from "../repo/forms";
+import { createEvent, setEventStatus } from "../repo/events";
 import { DEMO_PEOPLE, DEMO_TAGS } from "./members";
 
 /**
@@ -147,10 +152,32 @@ export async function loadDemoData(db: Tx, actor: WriteActor): Promise<DemoState
   return demoState(db);
 }
 
-/** A weekday, as an ISO date, counting back from today. */
+/**
+ * The demo church's own clock. It is in Chicago, which is what `buildDemoChurch`
+ * gives it, and every screen in the product reads a date in the church's
+ * timezone rather than in UTC.
+ */
+const DEMO_ZONE = "America/Chicago";
+
+/** Today where the church is, which after 19:00 there is not today in UTC. */
+function demoToday(): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: DEMO_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+  return new Date(`${parts}T00:00:00Z`);
+}
+
+/**
+ * A date, counting back from today, as the church would read it.
+ *
+ * It counted back from UTC, so a template built after seven in the evening in
+ * Chicago gave the demo a service "today" that the check-in screen read as
+ * tomorrow, and a visitor met "Nothing on today" on a church whose whole point
+ * was showing a service running.
+ */
 const daysAgo = (n: number): string => {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
+  const d = demoToday();
+  d.setUTCDate(d.getUTCDate() - n);
   return d.toISOString().slice(0, 10);
 };
 
@@ -446,4 +473,168 @@ export async function removeDemoData(db: Tx, actor: WriteActor): Promise<DemoRem
     households: goneHouseholds.length,
     tags: goneTags.length,
   };
+}
+
+/**
+ * HRT-416. The rest of the product, so a demo shows what a church is buying.
+ *
+ * The demo filled people, services, attendance, check-in, groups and serving,
+ * and left giving, announcements, forms and events empty. Giving and messaging
+ * are what a church asks about first, and an empty Giving screen in a demo
+ * reads as a product that cannot do it.
+ *
+ * Nothing here can reach a person or a card. The church has no messaging
+ * credentials, so an announcement is read in the product and sent nowhere, and
+ * it has no Stripe account, so the gifts are the ones a treasurer types in
+ * after counting a bag.
+ */
+export async function loadDemoExtras(db: Tx, actor: WriteActor): Promise<void> {
+  if (!canManageChurch(actor)) throw new PermissionError(actor.role, "manageDemoData");
+
+  const people = await db
+    .select({ id: members.id })
+    .from(members)
+    .where(eq(members.tenantId, actor.tenantId));
+  const everyone = people.map((row) => row.id);
+
+  await loadGiving(db, actor, everyone);
+  await loadNotices(db, actor);
+  await loadForms(db, actor);
+  await loadEvents(db, actor);
+}
+
+/**
+ * R13.9 to R13.15. Funds, two counted services, and the gifts in them.
+ *
+ * Counted rather than online: a demo church has no Stripe account, and a
+ * counting session is the half of giving every church does whether or not it
+ * takes a card.
+ */
+async function loadGiving(db: Tx, actor: WriteActor, everyone: string[]): Promise<void> {
+  const general = await writeFund(db, actor, {
+    name: "General fund",
+    description: "Where a gift goes when the giver does not say.",
+  });
+  const building = await writeFund(db, actor, {
+    name: "Building fund",
+    restricted: true,
+    description: "Kept for the roof.",
+  });
+  const missions = await writeFund(db, actor, { name: "Missions", restricted: true });
+
+  /* Two weeks of counting, so the screen has a figure for this month and the
+     one before it, and the year total is not the same number twice. */
+  const weeks = [
+    { on: daysAgo(6), name: "Sunday count" },
+    { on: daysAgo(13), name: "Sunday count" },
+  ];
+
+  for (const [week, when] of weeks.entries()) {
+    const batch = await openBatch(db, actor, { name: when.name, receivedOn: when.on });
+    /* A spread of amounts and methods, because a column of identical gifts
+       teaches a reader nothing about what the screen does. */
+    const giving = [
+      { fund: general.id, cents: 25_000, method: "cheque", reference: "2041" },
+      { fund: general.id, cents: 10_000, method: "cash" },
+      { fund: general.id, cents: 5_000, method: "cash" },
+      { fund: building.id, cents: 50_000, method: "cheque", reference: "2042" },
+      { fund: missions.id, cents: 7_500, method: "cash" },
+      { fund: general.id, cents: 12_000, method: "cheque", reference: "2043" },
+    ];
+
+    for (const [at, gift] of giving.entries()) {
+      await recordGift(db, actor, {
+        fundId: gift.fund,
+        batchId: batch.id,
+        amountCents: gift.cents,
+        method: gift.method as never,
+        reference: gift.reference ?? null,
+        receivedOn: when.on,
+        /* Named where the church knows who gave, anonymous where it does not,
+           which is what a bag actually holds. */
+        memberId: at < 4 ? (everyone[(week * 4 + at) % everyone.length] ?? null) : null,
+      });
+    }
+
+    await closeBatch(db, actor, batch.id);
+  }
+}
+
+/** R16.x. Something on the noticeboard, which is what the portal opens on. */
+async function loadNotices(db: Tx, actor: WriteActor): Promise<void> {
+  await writeAnnouncement(db, actor, {
+    title: "Church lunch after the late service",
+    body: "Everyone is welcome. Bring a dish if you can, and come anyway if you cannot.",
+    hue: "amber",
+    pinned: true,
+  });
+  await writeAnnouncement(db, actor, {
+    title: "Volunteers needed in the car park",
+    body: "Half an hour before the service, once a month. Speak to the welcome team.",
+    hue: "fern",
+  });
+}
+
+/** R4.x. A form a church actually uses, with its questions. */
+async function loadForms(db: Tx, actor: WriteActor): Promise<void> {
+  const form = await createForm(db, actor, {
+    name: "Connection card",
+    intro: "Welcome. Tell us who you are and we will be in touch this week.",
+    thanks: "Thank you. Somebody will be in touch.",
+    hue: "sky",
+  });
+
+  const asked: { kind: string; label: string; required?: boolean; options?: string[] }[] = [
+    { kind: "text", label: "First name", required: true },
+    { kind: "text", label: "Last name", required: true },
+    { kind: "email", label: "Email address" },
+    { kind: "phone", label: "Phone" },
+    { kind: "select", label: "Is this your first visit?", options: ["Yes", "No"] },
+    { kind: "long_text", label: "Anything we can pray for?" },
+  ];
+  for (const question of asked) {
+    await addFormField(db, actor, form.id, {
+      kind: question.kind as never,
+      label: question.label,
+      required: question.required ?? false,
+      options: question.options ?? null,
+    });
+  }
+  await setFormStatus(db, actor, form.id, "open");
+}
+
+/** R15.x. Something in the diary, open for people to put their name down. */
+async function loadEvents(db: Tx, actor: WriteActor): Promise<void> {
+  /** Forward from the church's own today, for the same reason as daysAgo. */
+  const inDays = (n: number): string => daysAgo(-n);
+
+  const weekend = await createEvent(db, actor, {
+    name: "Church weekend away",
+    description: "Two nights, all ages, and somebody else does the cooking.",
+    hue: "violet",
+    startsOn: inDays(38),
+    endsOn: inDays(40),
+    location: "Oakwood Retreat Centre",
+    listed: true,
+    takesRegistrations: true,
+    capacity: 60,
+  });
+
+  const quiz = await createEvent(db, actor, {
+    name: "Quiz night",
+    description: "Teams of six. Bring your own snacks.",
+    hue: "citron",
+    startsOn: inDays(12),
+    startsAt: "19:00",
+    location: "Church hall",
+    listed: true,
+    takesRegistrations: true,
+    capacity: 80,
+  });
+
+  /* R15.x. Published, because a diary of drafts shows a church the screen
+     rather than the thing the screen is for. */
+  for (const event of [weekend, quiz]) {
+    await setEventStatus(db, actor, event.id, "published");
+  }
 }

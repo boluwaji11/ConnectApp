@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { spanningSubdomains } from "@/lib/cookie-domain";
 import { AUTH_BUDGET_MS, budgetedFetch } from "@/lib/budget";
 import { DEV_PASS, gated, openInDev, passHolds } from "@/lib/dev-gate";
+import { backTo, DEMO_ENTRY, isDemoHost } from "@/lib/demo-host";
+import { DEMO_COOKIE } from "@/lib/demo-pass-name";
 
 /**
  * Refreshes the Supabase session on every request, because a Server Component
@@ -52,6 +54,35 @@ export async function middleware(request: NextRequest) {
   await supabase.auth.getClaims();
 
   /*
+   * HRT-416. On the demo's own address, arriving is starting.
+   *
+   * A visitor with no pass is handed a church of their own and put back where
+   * they were going. Everything after that is the product, carrying the pass
+   * like any other demo.
+   *
+   * The dev gate does not apply here, and nothing is opened by that: this host
+   * serves nothing but demo churches, because a request without a pass never
+   * gets past the line below.
+   */
+  if (isDemoHost(request.headers.get("x-forwarded-host") ?? request.headers.get("host"))) {
+    const pathname = request.nextUrl.pathname;
+    const passing =
+      pathname.startsWith(DEMO_ENTRY) ||
+      pathname.startsWith("/auth/") ||
+      pathname.startsWith("/api/");
+
+    if (!passing && !request.cookies.get(DEMO_COOKIE)?.value) {
+      /* The root of this host is the demo, not the marketing site: somebody
+         who typed the address in wants to be inside the product. Anywhere
+         else is where they were already going. */
+      const going = pathname === "/" ? "/dashboard" : pathname + request.nextUrl.search;
+      const away = backTo(request.headers, `${DEMO_ENTRY}?next=${encodeURIComponent(going)}`);
+      return NextResponse.redirect(away);
+    }
+    return response;
+  }
+
+  /*
    * HRT-402. On the development deployment, everything is behind the team.
    *
    * After the refresh above, so somebody whose pass has run out is still
@@ -86,6 +117,6 @@ export const config = {
      */
     /* One string, because Next reads this statically and cannot follow a
        sum of them. */
-    "/((?!_next/static|_next/image|favicon.ico|design|api/providers/resend/callback|api/email/drain|api/stripe/webhook|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff2?)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|design|api/providers/resend/callback|api/email/drain|api/demo/refresh|api/stripe/webhook|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff2?)$).*)",
   ],
 };
