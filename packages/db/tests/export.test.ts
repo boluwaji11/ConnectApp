@@ -176,6 +176,16 @@ describe("field-level permissions apply to an export too (R1.5, R21.2)", () => {
     expect(archive.meta.withheld).toContain("notes.body");
   });
 
+  it("never writes a sealed provider credential, under either of its names", async () => {
+    const archive = await archiveFor(riverside, "owner");
+    for (const row of archive.data["church_providers"] ?? []) {
+      expect(row).not.toHaveProperty("access_token");
+      expect(row).not.toHaveProperty("credential_key_id");
+      expect(row["credential"] === "sealed" || row["credential"] === null).toBe(true);
+    }
+    expect(archive.csv["church_providers"]).not.toContain("access_token");
+  });
+
   it("never writes ciphertext into the CSVs either", async () => {
     const archive = await archiveFor(riverside, "admin");
     expect(archive.csv["notes"]).not.toContain("v1.");

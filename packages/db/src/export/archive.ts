@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
 import type { Tx } from "../client";
-import { canReadConfidentialNotes, canArchivePeople, PermissionError, type TenantRole } from "../roles";
+import {
+  canReadConfidentialNotes, canReadGivingAmounts, canArchivePeople, PermissionError,
+  type TenantRole, type Permission, type Who,
+} from "../roles";
 import { decryptNote } from "../crypto";
 import { toCsv } from "./csv";
 
@@ -164,7 +167,17 @@ export const ARCHIVE_FORMAT = 1;
  */
 export async function buildArchive(
   db: Tx,
-  actor: { tenantId: string; role: TenantRole },
+  /*
+   * SEC-007. The permissions come too, because this decides what a role may
+   * read and `canX(role)` on a bare role answers for the built-in matrix
+   * only: a church that wrote its own role carries `member` plus an array,
+   * and the array is where its grants are.
+   */
+  actor: {
+    tenantId: string;
+    role: TenantRole;
+    permissions?: readonly Permission[] | null;
+  },
   church: { name: string; slug: string },
 ): Promise<Archive> {
   // Exporting hands over every record the church holds in one file. That is the
@@ -203,7 +216,17 @@ export async function buildArchive(
       sql`select * from ${sql.identifier(table)}`,
     )) as unknown as Record<string, unknown>[];
 
-    const cleaned = rows.map((row) => clean(table, row, actor.role, withheld));
+    const cleaned = rows
+      .map((row) => clean(table, row, actor, withheld))
+      .filter((row): row is Record<string, unknown> => row !== null);
+
+    /* SEC-007. Said once for the table rather than once per row, and said
+       even when the table is empty, so the reader is told the difference
+       between a church with no gifts and a role that may not read them. */
+    if (GIVING_TABLES.has(table) && !canReadGivingAmounts(actor)) {
+      withheld.push(`${table}.*`);
+    }
+
     data[table] = cleaned;
     counts[table] = cleaned.length;
   }
@@ -245,16 +268,44 @@ export async function buildArchive(
  * advertise a column its CSV would never carry.
  */
 const DROPPED: Record<string, string[]> = {
-  church_providers: ["credential_key_id"],
+  church_providers: ["credential_key_id", "access_token"],
   notes: ["body_encrypted"],
 };
+
+/**
+ * SEC-007, R13.11. The tables the giving permission governs.
+ *
+ * An export is the easiest place in a product to hand over a field a screen
+ * refuses, and this was the place it happened. The archive is gated on
+ * `members.archive`, which an Admin holds, and `giving.amounts`, which an
+ * Admin does not, was never consulted: so a role the product keeps out of
+ * every amount on the giving screen, the reports, the statements and the CSV
+ * could download the whole ledger as `gifts.csv`.
+ *
+ * Withheld whole rather than redacted column by column. The permission governs
+ * the ledger, not one column of it, and a gift row names the giver as well as
+ * the amount. The table still arrives with its header, and `meta.withheld`
+ * says what is missing and why, the same way a confidential note does.
+ */
+const GIVING_TABLES = new Set([
+  "gifts",
+  "gift_batches",
+  "recurring_gifts",
+  "pledges",
+  "campaigns",
+  "stripe_accounts",
+]);
 
 function clean(
   table: string,
   row: Record<string, unknown>,
-  role: TenantRole,
+  role: Who,
   withheld: string[],
-): Record<string, unknown> {
+): Record<string, unknown> | null {
+  if (GIVING_TABLES.has(table) && !canReadGivingAmounts(role)) {
+    return null;
+  }
+
   /*
    * R21.15. A sealed provider credential leaves with nobody.
    *
@@ -266,6 +317,9 @@ function clean(
     const out = { ...row };
     delete out["credential"];
     delete out["credential_key_id"];
+    /* SEC-007. Sealed with the same key and the same objection, and it was
+       the one of the two that left in the file. */
+    delete out["access_token"];
     out["credential"] = row["credential"] ? "sealed" : null;
     withheld.push("church_providers.credential");
     return out;
