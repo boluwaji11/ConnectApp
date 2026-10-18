@@ -26,7 +26,21 @@ export async function GET(request: NextRequest) {
   if (!canManageChurch(session) && !canManageEvents(session)) {
     return refused(session.role, "manageForms");
   }
-  if (!key.startsWith(`${session.tenantSlug}/form_answer/`)) {
+  /*
+   * SEC-017. The whole shape of the key, not just how it begins.
+   *
+   * `startsWith` was the entire check, and a key is a path.
+   * `riverside/form_answer/../../other/logo/x.png` begins exactly as required
+   * and then leaves. Whether Supabase Storage resolves `..` in an object key
+   * or treats it as a literal decides whether that reads another church's
+   * file, and a check that depends on the answer is the wrong check.
+   *
+   * The sibling route that serves website media already matches a full shape,
+   * which is the pattern copied here: one slug, the one purpose this route is
+   * for, a uuid, and an extension from the list the upload accepts.
+   */
+  const KEY = /^[a-z0-9][a-z0-9-]{0,62}\/form_answer\/[a-f0-9-]{36}\.[a-z0-9]{1,8}$/;
+  if (!KEY.test(key) || !key.startsWith(`${session.tenantSlug}/form_answer/`)) {
     return new NextResponse(null, { status: 404 });
   }
 

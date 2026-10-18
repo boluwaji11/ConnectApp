@@ -48,6 +48,18 @@ export async function proveSmtp(
     port: settings.port,
     secure: settings.secure,
     auth: { user: settings.username, pass: settings.password },
+    /*
+     * SEC-015, R21.15. The church's own mailbox password is never sent in the
+     * clear.
+     *
+     * `secure: true` is implicit TLS on 465. On 587, which is what most
+     * providers tell a church to use, the connection starts in the clear and
+     * upgrades, and nodemailer will carry on unencrypted if the server simply
+     * does not advertise STARTTLS. That is the one place in the product where a
+     * credential a church gave us crosses a wire, so it fails rather than
+     * downgrading. The platform's own transport already asks for this.
+     */
+    requireTLS: !settings.secure,
     connectionTimeout: PATIENCE,
     greetingTimeout: PATIENCE,
     socketTimeout: PATIENCE,
@@ -319,6 +331,18 @@ export async function sendBySmtp(
     port: settings.port,
     secure: settings.secure,
     auth: { user: settings.username, pass: settings.password },
+    /*
+     * SEC-015, R21.15. The church's own mailbox password is never sent in the
+     * clear.
+     *
+     * `secure: true` is implicit TLS on 465. On 587, which is what most
+     * providers tell a church to use, the connection starts in the clear and
+     * upgrades, and nodemailer will carry on unencrypted if the server simply
+     * does not advertise STARTTLS. That is the one place in the product where a
+     * credential a church gave us crosses a wire, so it fails rather than
+     * downgrading. The platform's own transport already asks for this.
+     */
+    requireTLS: !settings.secure,
     connectionTimeout: PATIENCE,
     greetingTimeout: PATIENCE,
     socketTimeout: PATIENCE,

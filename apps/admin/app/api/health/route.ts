@@ -1,3 +1,4 @@
+import { bearerHolds } from "@connectapp/db";
 import { NextResponse } from "next/server";
 import { platformHealth } from "@connectapp/db";
 import { environment } from "@connectapp/env";
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
   }
 
   const given = request.headers.get("authorization");
-  if (given !== `Bearer ${secret}`) {
+  if (!bearerHolds(given, secret)) {
     return NextResponse.json({ error: "No" }, { status: 401 });
   }
 

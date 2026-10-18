@@ -217,3 +217,4 @@ export { loadEnv } from "./env";
 export * from "./repo/notifications";
 export * as platform from "./repo/platform";
 export * as platformHealth from "./repo/platform-health";
+export { bearerHolds } from "./bearer";

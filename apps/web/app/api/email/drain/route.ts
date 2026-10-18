@@ -1,3 +1,4 @@
+import { bearerHolds } from "@connectapp/db";
 import { drain, checkVerdicts, keepGrantsAlive } from "@/lib/send-worker";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export const maxDuration = 300;
  */
 export async function GET(request: Request): Promise<Response> {
   const secret = process.env["CRON_SECRET"];
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!secret || !bearerHolds(request.headers.get("authorization"), secret)) {
     return new Response(null, { status: 401 });
   }
 

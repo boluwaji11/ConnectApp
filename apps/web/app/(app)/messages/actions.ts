@@ -1,7 +1,7 @@
 "use server";
 
 import {
-  withTenant, sendMessage, setThreadArchived, threadAt, holdsFile,
+  withTenant, sendMessage, setThreadArchived, threadAt, canReadMessageFile,
   saveDraft, dropDraft, peopleNamed, writableGroups, writableTeams, react,
   editMessage, deleteMessage, canAnswerMessages, tellAbout,
 } from "@connectapp/db";
@@ -85,8 +85,18 @@ export async function messageFileLink(
   /** What to call it once it lands, which is the name it arrived with. */
   name?: string,
 ): Promise<string | null> {
-  const { ctx } = await context();
-  const mine = await withTenant(ctx, (tx) => holdsFile(tx, key));
+  const { session, ctx } = await context();
+  /*
+   * SEC-019. Party to the conversation, not merely in the church.
+   *
+   * This asked `holdsFile`, which answers whether the church holds the key and
+   * says as much in its own comment. So any member with a key was signed an
+   * hour-long URL to an attachment from a thread they were never in, pastoral
+   * ones included. Every other read in this file is scoped to the reader.
+   */
+  const mine = await withTenant(ctx, async (tx) =>
+    canReadMessageFile(tx, await readerFor(tx, session), key),
+  );
   if (!mine) return null;
 
   const supabase = await supabaseServer();

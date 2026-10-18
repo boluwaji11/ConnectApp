@@ -95,6 +95,9 @@ describe("the application role itself", () => {
       join pg_namespace n on n.oid = c.relnamespace
       join pg_attribute a on a.attrelid = c.oid and a.attname = 'tenant_id' and a.attnum > 0
       where n.nspname = 'public' and c.relkind = 'r'
+        -- SEC-011. The platform's own. Denied to the application role outright
+        -- rather than scoped to its own rows, which hardening.test.ts asserts.
+        and c.relname not like 'platform\_%'
         and not exists (
           select 1 from pg_policies p
           where p.schemaname = 'public' and p.tablename = c.relname

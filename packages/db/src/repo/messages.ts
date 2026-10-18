@@ -638,6 +638,37 @@ export async function react(
     .onConflictDoNothing();
 }
 
+/**
+ * R16.14, R21.1. Whether this reader may open a file sent in a message.
+ *
+ * SEC-019. The action behind this asked `holdsFile`, which answers only whether
+ * the church holds the key, and its own comment says so. So any member of the
+ * church who had a storage key was signed a one-hour URL to an attachment from
+ * any conversation, including a pastoral one they were never part of. Every
+ * other read in this file is scoped to the reader; this one was scoped to the
+ * tenant.
+ *
+ * The key walks back to the conversation it was sent in, and then through the
+ * same participation test the thread itself uses, so a file is exactly as
+ * readable as the message that carried it.
+ */
+export async function canReadMessageFile(
+  db: Tx,
+  reader: Reader,
+  key: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ conversationId: messages.conversationId })
+    .from(messageFiles)
+    .innerJoin(storedFiles, eq(storedFiles.id, messageFiles.fileId))
+    .innerJoin(messages, eq(messages.id, messageFiles.messageId))
+    .where(eq(storedFiles.key, key))
+    .limit(1);
+
+  if (!row) return false;
+  return canRead(db, reader, row.conversationId);
+}
+
 /** Whether this reader is in a conversation at all. */
 export async function canRead(
   db: Tx,

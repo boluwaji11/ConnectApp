@@ -1,3 +1,4 @@
+import { bearerHolds } from "@connectapp/db";
 import { NextResponse, type NextRequest } from "next/server";
 import { rebuildDemoTemplate, sweepExpiredDemos } from "@connectapp/db";
 
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
   if (!secret) return new NextResponse("Not configured", { status: 503 });
 
   const given = request.headers.get("authorization");
-  if (given !== `Bearer ${secret}`) return new NextResponse("No", { status: 401 });
+  if (!bearerHolds(given, secret)) return new NextResponse("No", { status: 401 });
 
   const at = Date.now();
   /* Copies already handed out are left alone: somebody is looking at one. They

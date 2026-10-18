@@ -193,11 +193,22 @@ describe("blockout dates", () => {
     expect(made.overridden).toBe(true);
   });
 
-  it("is listed and can be taken back off", async () => {
+  it("is listed and can be taken back off by the person it belongs to", async () => {
     const [one] = await run((tx) => listBlockouts(tx, ids.Boma!));
     expect(one?.startsOn).toBe("2027-03-07");
 
-    await run((tx) => removeBlockout(tx, as(), one!.id));
+    /*
+     * SEC-018. Somebody else's id does not take it off. This used to be a
+     * delete by row id with the actor discarded, so any member of the church
+     * could clear another member's unavailability and the scheduler would then
+     * roster them onto a date they had declared themselves away for.
+     */
+    await expect(
+      run((tx) => removeBlockout(tx, as(), one!.id, ids.Chi!)),
+    ).rejects.toThrow(InvalidInputError);
+    expect(await run((tx) => listBlockouts(tx, ids.Boma!))).toHaveLength(1);
+
+    await run((tx) => removeBlockout(tx, as(), one!.id, ids.Boma!));
     expect(await run((tx) => listBlockouts(tx, ids.Boma!))).toHaveLength(0);
   });
 });

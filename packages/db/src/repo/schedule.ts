@@ -603,10 +603,30 @@ export async function addBlockout(
   return { id: row!.id };
 }
 
-export async function removeBlockout(db: Tx, _actor: WriteActor, id: string): Promise<void> {
+/**
+ * R10.5. Taking back an unavailable date.
+ *
+ * SEC-018. Whose row it is decides it. This took an id and an actor it threw
+ * away, so any member of the church could delete any other member's
+ * unavailability by its id, and the scheduler would then roster that person
+ * onto a date they had declared themselves away for. `addBlockout` resolves the
+ * member from the session and `answerMyAssignment` constrains on it; this was
+ * the one in the family that did neither.
+ *
+ * The member is required rather than optional, because the only caller is
+ * somebody managing their own dates and it resolves them from the session
+ * already. A screen that lets a scheduler clear somebody else's would be a
+ * different function with a permission check in it.
+ */
+export async function removeBlockout(
+  db: Tx,
+  actor: WriteActor,
+  id: string,
+  memberId: string,
+): Promise<void> {
   const gone = await db
     .delete(blockoutDates)
-    .where(eq(blockoutDates.id, id))
+    .where(and(eq(blockoutDates.id, id), eq(blockoutDates.memberId, memberId)))
     .returning({ id: blockoutDates.id });
   if (gone.length === 0) throw new InvalidInputError("blockout.error.missing");
 }

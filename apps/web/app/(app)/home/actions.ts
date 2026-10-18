@@ -82,12 +82,18 @@ export async function addAway(
 export async function removeAway(id: string): Promise<Done> {
   try {
     const { session, scope } = await asMember();
-    await withTenant(scope, (tx) =>
-      removeBlockout(
+    await withTenant(scope, async (tx) => {
+      /* SEC-018. Their own record, resolved from the session, the way
+         `addAway` already does it. The id alone used to be enough. */
+      const self = await personForUser(tx, session.userId);
+      if (!self) throw new InvalidInputError("member.error.noRecord");
+      await removeBlockout(
         tx,
         { tenantId: session.tenantId, role: session.role, userId: session.userId },
         id,
-      ));
+        self,
+      );
+    });
     revalidatePath("/home/schedule");
     return {};
   } catch (error) {
