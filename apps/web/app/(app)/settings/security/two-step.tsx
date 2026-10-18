@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Check, Copy, Download, Fingerprint, ShieldCheck } from "lucide-react";
 import {
   Banner, Button, Checkbox, Dialog, DialogContent, DialogFooter, Field, Input,
@@ -160,6 +161,7 @@ export function TwoStep({
   /** Whether what is protecting this account is a passkey rather than an app. */
   passkeyHeld?: boolean;
 }) {
+  const router = useRouter();
   const [stage, setStage] = React.useState<Stage>({ at: "shut" });
   const [manual, setManual] = React.useState(false);
   const [code, setCode] = React.useState("");
@@ -221,6 +223,10 @@ export function TwoStep({
       setIsOn(true);
       setPasskeyHeld(true);
       setLeft(done.codes.length);
+      /* R24.6. The overview rail is a server component and holds the same
+         answer. Without this the card said On and the rail still said Not
+         enabled until the screen was loaded again. */
+      router.refresh();
       setSaid(false);
       setStage({ at: "codes", codes: done.codes });
     });
@@ -239,6 +245,7 @@ export function TwoStep({
       setIsOn(true);
       setPasskeyHeld(false);
       setLeft(done.codes.length);
+      router.refresh();
       setCode("");
       setSaid(false);
       setStage({ at: "codes", codes: done.codes });
@@ -253,6 +260,7 @@ export function TwoStep({
       setIsOn(false);
       setPasskeyHeld(false);
       setLeft(0);
+      router.refresh();
       shut();
     });
   };
@@ -264,6 +272,7 @@ export function TwoStep({
       if ("error" in result) return setCardError(result.error);
       setLeft(result.codes.length);
       setSaid(false);
+      router.refresh();
       setStage({ at: "codes", codes: result.codes });
     });
   };

@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const listFactors = vi.fn();
-const unenroll = vi.fn(async () => ({ error: null }));
+const unenroll = vi.fn<(p: { factorId: string }) => Promise<{ error: { message: string } | null }>>();
 
 vi.mock("@/lib/supabase/server", () => ({
   supabaseServer: async () => ({ auth: { mfa: { listFactors, unenroll } } }),

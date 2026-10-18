@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { t, type MessageKey } from "@connectapp/i18n";
 import { requireSession } from "@/lib/session";
 import { safeOrigin } from "@/lib/safe-redirect";
+import { createClient } from "@supabase/supabase-js";
 import { supabaseServer } from "@/lib/supabase/server";
 import { explainAuth } from "@/lib/auth-errors";
 import {
@@ -25,11 +26,27 @@ const field = (data: FormData, name: string) => String(data.get(name) ?? "");
  * Supabase will change an email address or a password on the strength of an
  * open session alone. An open session is a laptop somebody walked away from,
  * so both changes ask for the password first.
+ *
+ * Checked on a client of its own, which holds nothing and writes no cookie.
+ *
+ * It used the request's own client, and `signInWithPassword` does not only
+ * answer whether a password is right: it creates a session and stores it. So
+ * proving the password replaced a session that had presented a second factor
+ * with a brand new one that had not, and the very next render sent the person
+ * to the code screen with the thing they had asked for undone. Pressing
+ * "Generate new codes" and typing the right password answered with a demand
+ * for a six digit code and no new codes.
  */
 async function withPassword(email: string, password: string): Promise<boolean> {
   if (!password) return false;
-  const supabase = await supabaseServer();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  const check = createClient(
+    process.env["NEXT_PUBLIC_SUPABASE_URL"]!,
+    process.env["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"]!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+
+  const { error } = await check.auth.signInWithPassword({ email, password });
   return !error;
 }
 
