@@ -57,7 +57,7 @@ export default async function RequiredTwoStep({
       title={t("twoStep.required.title")}
       under={t("twoStep.required.lede")}
       footer={
-<SignOutLink label="twoStep.required.signOut" />
+<SignOutLink>{t("twoStep.required.signOut")}</SignOutLink>
       }
     >
       <Enrol next={next} alreadyOn={state.enrolledAt !== null} />

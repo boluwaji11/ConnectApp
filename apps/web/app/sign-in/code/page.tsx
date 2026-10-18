@@ -69,7 +69,7 @@ export default async function TwoStepCode({
       title={t("twoStep.signInTitle")}
       under={t("twoStep.signInLede")}
       footer={
-<SignOutLink label="twoStep.signOut" />
+<SignOutLink>{t("twoStep.signOut")}</SignOutLink>
       }
     >
       <CodeForm
