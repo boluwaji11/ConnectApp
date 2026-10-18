@@ -107,14 +107,77 @@ async function record(
     )`;
 }
 
+/**
+ * HRT-434, R1.11, R21.3. How long the same look counts as the same look.
+ *
+ * An operator opening a church, reading it, going back and opening it again is
+ * one piece of work, not three. Without this the log fills with the same line
+ * and the question it exists to answer, which church did somebody go through
+ * last Tuesday, gets harder to read rather than easier.
+ */
+const SAME_LOOK_MINUTES = 15;
+
+/**
+ * HRT-434, R1.11, R21.3. Writing down that an operator looked.
+ *
+ * Every privileged write in this file was recorded and no read was, which is
+ * the wrong way round for a portal whose entire purpose is reach across
+ * churches. An operator who changes nothing and reads everything left no
+ * trace at all: the question "who looked at that church's records" had no
+ * answer, and it is the question that gets asked after something leaks.
+ *
+ * Only the looks worth a line. Opening one church, searching for one by name,
+ * and looking an account up by the address it signs in with. Not the home
+ * screen's counts and not the unfiltered list, which are what the portal
+ * draws on arrival and would say nothing except that somebody opened it.
+ *
+ * Written on the owner connection beside the read it belongs to, and never
+ * allowed to be the reason a read fails: an operator who cannot be recorded
+ * still needs to be able to help the church on the phone. A write that fails
+ * is a louder problem than a read that does, and the row it would have
+ * written is one line rather than the record itself.
+ */
+async function recordALook(
+  actor: { id: string; name: string },
+  action: string,
+  about: { tenantId?: string; tenantName?: string; note?: string } = {},
+): Promise<void> {
+  try {
+    const subject = about.note?.trim() || null;
+    const rows = await owner()<{ there: boolean }[]>`
+      select exists (
+        select 1 from platform_events
+         where actor_id = ${actor.id}
+           and action = ${action}
+           and tenant_id is not distinct from ${about.tenantId ?? null}
+           and note is not distinct from ${subject}
+           and at > now() - ${`${SAME_LOOK_MINUTES} minutes`}::interval
+      ) as there`;
+    if (rows[0]?.there) return;
+
+    await record(actor, action, about);
+  } catch {
+    /* Nothing to do about a log that cannot be written, and refusing the read
+       over it would take the portal away from whoever is on the phone. */
+  }
+}
+
 /** R21.x. Every church on the platform, newest first. */
 export async function listChurches(
   by: string,
   opts: { query?: string; standing?: "all" | "provisional" | "approved" | "archived" } = {},
 ): Promise<ChurchRow[]> {
-  await requireAdmin(by);
-  const like = `%${(opts.query ?? "").trim().toLowerCase()}%`;
+  const who = await requireAdmin(by);
+  const asked = (opts.query ?? "").trim();
+  const like = `%${asked.toLowerCase()}%`;
   const standing = opts.standing ?? "all";
+
+  /*
+   * HRT-434. A search is somebody looking for a particular church, which is
+   * worth a line. The unfiltered list is the screen the portal opens on and
+   * says nothing but that somebody opened it.
+   */
+  if (asked) await recordALook(who, "searched", { note: asked });
 
   return owner()<ChurchRow[]>`
     select
@@ -156,7 +219,21 @@ export async function listChurches(
 /** R21.x. One church, as the operator's page reads it. */
 export async function church(by: string, id: string): Promise<ChurchRow | null> {
   const all = await listChurches(by);
-  return all.find((one) => one.id === id || one.slug === id) ?? null;
+  const found = all.find((one) => one.id === id || one.slug === id) ?? null;
+
+  /*
+   * HRT-434, R1.11, R21.3. The record that matters most in this portal.
+   *
+   * This page carries the church's owner by name and by address and what the
+   * church holds. Reading it changes nothing, which is exactly why it left no
+   * trace, and "nobody changed anything" is not an answer to "who looked".
+   */
+  if (found) {
+    const who = await requireAdmin(by);
+    await recordALook(who, "opened", { tenantId: found.id, tenantName: found.name });
+  }
+
+  return found;
 }
 
 async function named(id: string): Promise<{ id: string; name: string }> {
@@ -478,10 +555,18 @@ export interface TwoStepLookup {
  * holds an account here.
  */
 export async function twoStepFor(by: string, email: string): Promise<TwoStepLookup | null> {
-  await requireAdmin(by);
+  const who = await requireAdmin(by);
 
   const wanted = email.trim().toLowerCase();
   if (!wanted) return null;
+
+  /*
+   * HRT-434. Written down before the answer, and for an address with no
+   * account as well as one with. What is worth reviewing is that somebody
+   * went looking for this address, which is true either way, and recording
+   * only the hits would make the log say which addresses hold an account.
+   */
+  await recordALook(who, "looked up", { note: wanted });
 
   const rows = await owner()<{
     user_id: string; email: string; name: string | null;

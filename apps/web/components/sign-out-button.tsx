@@ -7,6 +7,7 @@ import {
 } from "@connectapp/ui";
 import { t } from "@connectapp/i18n";
 import { clearSectionMemory } from "./shell/section-memory";
+import { forgetThisChurch } from "@/app/(app)/checkin/offline/store";
 
 /**
  * Signing out, with a question first.
@@ -79,6 +80,22 @@ export function SignOutButton({
             onSubmit={() => {
               setGoing(true);
               clearSectionMemory();
+              /*
+               * HRT-436, R8.20, R21.2. A check-in tablet is shared, and what
+               * it holds is a church's whole roster with every child's name
+               * and allergies in it. Signing out leaves none of that behind.
+               *
+               * Not awaited: the form is posting and the browser is already
+               * navigating. The clearing is also done on the way back in,
+               * where a snapshot belonging to another station is thrown away
+               * rather than drawn, so a tab closed instead of signed out of
+               * reaches the same place.
+               *
+               * Check-ins this station has not sent yet are kept. R8 is
+               * safety-critical and an unsent event is a record of a child
+               * being handed over.
+               */
+              void forgetThisChurch();
             }}
           >
             <Button type="submit" variant="danger" loading={going}>

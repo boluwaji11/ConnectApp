@@ -13,6 +13,7 @@ import {
 import { t } from "@connectapp/i18n";
 import { useInstall } from "./installed";
 import { Opening } from "../opening";
+import { forgetThisChurch } from "@/app/(app)/checkin/offline/store";
 
 export interface PortalTab {
   label: string;
@@ -139,6 +140,9 @@ export function PortalAccount({
           disabled={going}
           onSelect={() => {
             setGoing(true);
+            /* HRT-436. The same clearing the product's sign-out does. A phone
+               is not a shared station, but one address signs into both. */
+            void forgetThisChurch();
             out.current?.requestSubmit();
           }}
         >

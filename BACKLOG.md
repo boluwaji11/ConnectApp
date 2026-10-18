@@ -1136,9 +1136,9 @@ of money and after everything else.
 | HRT-431 | A limit on what an unauthenticated caller can make us do | R21.5, R13.2 | Resolved |
 | HRT-432 | drizzle-orm to 0.45.x, behind the isolation suite | R21.1 | Open |
 | HRT-433 | The development gate applies to the demo host too | R21.3, R19.7 | Resolved |
-| HRT-434 | What an operator read, not only what they changed | R1.11, R21.3 | Open |
+| HRT-434 | What an operator read, not only what they changed | R1.11, R21.3 | Resolved |
 | HRT-435 | Append-only enforced in the database, not by the absence of a writer | R1.11, R8.x | Resolved |
-| HRT-436 | The station forgets a church when it is signed out of | R8.20, R21.2 | Open |
+| HRT-436 | The station forgets a church when it is signed out of | R8.20, R21.2 | Resolved |
 | HRT-437 | Two-step verification: enrolment, the challenge at sign-in, and recovery codes | R1.8, R21.4 | Resolved |
 | HRT-438 | Two-step required of anybody who can read member information, at sign-up | R1.8, R21.4 | Resolved |
 | HRT-439 | Two-step on the operator portal, which has cross-church reach | R1.8, R21.4 | Resolved |

@@ -47,7 +47,7 @@ export function useStation(stationId: string, occurrenceId: string, church: stri
   const [local, setLocal] = React.useState<Record<string, { roomId: string | null; code: string | null }>>({});
 
   const countWaiting = React.useCallback(async () => {
-    const events = await pendingEvents();
+    const events = await pendingEvents(stationId);
     setWaiting(events.length);
 
     const mine: Record<string, { roomId: string | null; code: string | null }> = {};
@@ -56,11 +56,13 @@ export function useStation(stationId: string, occurrenceId: string, church: stri
       else delete mine[event.memberId];
     }
     setLocal(mine);
-  }, []);
+  }, [stationId]);
 
   /** R8.23. Send what this station did, then take a fresh roster and codes. */
   const reconcile = React.useCallback(async () => {
-    const events = await pendingEvents();
+    /* HRT-436. Only what happened on this station. A tablet carried between
+       churches must not hand the second one the first one's check-ins. */
+    const events = await pendingEvents(stationId);
     if (events.length > 0) {
       const sent = await sync(stationId, events);
       if (sent.error) return false;
@@ -87,11 +89,14 @@ export function useStation(stationId: string, occurrenceId: string, church: stri
 
   // What it is already holding, before anything is asked of the network.
   React.useEffect(() => {
-    void readSnapshot().then((held) => {
+    /* HRT-436, R8.20, R21.2. Only this station's, so a tablet that was last
+       used by another church draws nothing of theirs while the network
+       answers, and nothing at all when it cannot. */
+    void readSnapshot(stationId).then((held) => {
       if (held) setSnapshot(held);
     });
     void countWaiting();
-  }, [countWaiting]);
+  }, [stationId, countWaiting]);
 
   React.useEffect(() => {
     if (!occurrenceId) return;
@@ -218,10 +223,10 @@ export function useStation(stationId: string, occurrenceId: string, church: stri
           code,
           bagLabel: entry.bagLabel === true,
         };
-        await appendEvent(event);
+        await appendEvent(event, stationId);
       }
 
-      const held = await readSnapshot();
+      const held = await readSnapshot(stationId);
       if (held) setSnapshot(held);
       await countWaiting();
       return codes;
@@ -280,10 +285,10 @@ export function useStation(stationId: string, occurrenceId: string, church: stri
         at: new Date().toISOString(),
         occurrenceId,
         ...input,
-      });
+      }, stationId);
       await countWaiting();
     },
-    [occurrenceId, countWaiting],
+    [occurrenceId, stationId, countWaiting],
   );
 
   const state: StationState = {
@@ -297,12 +302,12 @@ export function useStation(stationId: string, occurrenceId: string, church: stri
   /** R8.21. Taking back a check-in this station has not sent yet. */
   const undoLocally = React.useCallback(
     async (memberId: string) => {
-      const events = await pendingEvents();
+      const events = await pendingEvents(stationId);
       const mine = events.filter((e) => e.kind === "checkin" && e.memberId === memberId);
       await forgetEvents(mine.map((e) => e.id));
       await countWaiting();
     },
-    [countWaiting],
+    [stationId, countWaiting],
   );
 
   return {
