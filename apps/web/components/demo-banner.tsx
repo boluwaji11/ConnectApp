@@ -18,9 +18,11 @@ export function DemoBanner({
 }) {
   if (!info.isDemo || !info.expiresAt) return null;
 
-  const when = info.expiresAt.toLocaleString(undefined, {
-    weekday: "long", hour: "numeric", minute: "2-digit",
-  });
+  /* "Monday at 1:22 AM". The day and the time, joined the way a person says
+     it, because "Monday 1:22 AM" reads as two facts rather than one moment. */
+  const day = info.expiresAt.toLocaleString(undefined, { weekday: "long" });
+  const time = info.expiresAt.toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
+  const when = `${day} at ${time}`;
 
   return (
     <Banner tone="warning" title={t("demo.banner.title")} className="rounded-none border-x-0 border-t-0">
