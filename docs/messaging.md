@@ -136,3 +136,59 @@ answer is still somebody's: the quote goes blank and the answer stands.
 No attachments, no read receipts beyond the unread mark, no typing indicator,
 and no message to several people who are not already a group. Each of those is
 a line on the board rather than a thing left out quietly.
+
+## The emails ConnectApp sends itself
+
+Separate from everything above, which is a church writing to its own people
+through its own provider. These eight go out under our name, through our
+Resend account, and are written in `packages/mail`:
+
+| Message | Written in | Sent from |
+|---|---|---|
+| Confirm your email address | `supabase.ts` | the auth hook |
+| Confirm your new email address | `supabase.ts` | the auth hook |
+| Set a new password | `supabase.ts` | the auth hook |
+| Sign in to ConnectApp | `supabase.ts` | the auth hook |
+| ConnectApp team invitation | `supabase.ts` | the auth hook |
+| Welcome | `messages.ts` | `create-church/actions.ts` |
+| Church approved | `messages.ts` | the admin portal |
+| Invitation to a church | `apps/web/lib/invite-mail.ts` | the invitation screens |
+
+All eight are drawn from one shell in `packages/mail/src/brand.ts`, and
+`packages/mail/tests/brand.test.ts` holds them to it: the shell, the voice
+rules in [ux-writing.md](ux-writing.md), and the one that matters most, that
+no link in any of them carries a Supabase host.
+
+### The auth send hook
+
+HRT-392. The five authentication messages would otherwise be Supabase's, both
+the wording and the link. Supabase mints the token behind a confirmation link
+and will not hand it to anything without the service role key, which never
+enters a request path here. Its send hook is the way through: it posts the
+token to `/api/auth/email` and sends nothing itself.
+
+It is **project configuration, not code**, and it is on for both:
+
+| Project | Endpoint |
+|---|---|
+| ConnectApp Dev | `https://dev.connectapp.church/api/auth/email` |
+| ChurchMgt (production) | `https://connectapp.church/api/auth/email` |
+
+Supabase dashboard, Authentication, Auth Hooks. The secret is
+`AUTH_SEND_HOOK_SECRET` and the route refuses anything it has not signed, so
+an unsigned call answers 401.
+
+**Turning the hook off does not stop the emails, it changes who writes them.**
+Supabase falls back to its own dashboard templates, whose `{{ .ConfirmationURL }}`
+resolves to `<project>.supabase.co`. The markup in `supabase.ts` is written to
+be pasted into those templates for exactly that case, but the link is Supabase's
+and cannot be ours. A ConnectApp email whose button points at a supabase.co
+address is the shape a phishing mail takes, so the hook being on is the thing
+to check first if a link ever looks wrong.
+
+**Working on a laptop.** The hook endpoint belongs to the Supabase project, not
+to the machine that triggered the email, so an authentication email raised from
+`localhost` is still sent by the development project and still links to
+`dev.connectapp.church`. That is the development deployment behaving correctly
+rather than a bug, and it means the link in such an email cannot be followed
+back to a laptop.
