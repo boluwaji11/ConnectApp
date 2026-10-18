@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import {
   membershipsForUser, resolveTenantByHost,
-  demoMembership, twoStepFor,
+  demoMembership, twoStepFor, needsTwoStep, TWO_STEP_REQUIRED_FROM,
   type Membership, type TenantRole, type Permission,
 } from "@connectapp/db";
 import { supabaseServer } from "./supabase/server";
@@ -315,6 +315,42 @@ export const requireSession = cache(async (asked?: string): Promise<Session> => 
    * said which spelling to resolve them in. Every screen awaits this first.
    */
   readsAs(m.tenantCountry);
+
+  /*
+   * HRT-438, R1.8, R21.4. A second factor, required of the people whose
+   * account is worth stealing.
+   *
+   * Asked of the permissions this membership holds rather than of the nine
+   * built-in names, because a church writes its own roles. A plain member
+   * holds none of them and is never sent here: every screen that reads the
+   * directory, the children's records, the giving or the church's settings
+   * already refuses them.
+   *
+   * Only accounts made on or after the day the rule started. Somebody who has
+   * been running their church for a month does not arrive one morning to a
+   * wall they were not expecting, and nobody is locked out of records they
+   * were already keeping. Widening it is a matter of moving one date.
+   *
+   * After the church is settled, because the answer depends on the role in
+   * this church rather than on the account. The same person can be an owner
+   * of one and a member of another.
+   */
+  /*
+   * Compared as numbers, not as whatever came back.
+   *
+   * `made >= cutoff` where `made` is a string and `cutoff` is a Date compares
+   * two strings, and "2026-10-20T10:00:00.000Z" sorts before "Mon Oct 19
+   * 2026", so an account made after the rule started read as made before it.
+   * The gate quietly never fired, which is the worst way for a requirement to
+   * fail: no error, no redirect, and nothing on screen to notice.
+   */
+  const made = twoStep.accountMadeAt;
+  const fresh =
+    made !== null && new Date(made).getTime() >= TWO_STEP_REQUIRED_FROM.getTime();
+
+  if (!twoStep.enrolledAt && fresh && needsTwoStep(m)) {
+    redirect(`/two-step/set-up${nextFrom(await here())}`);
+  }
 
   return {
     userId: user.id,

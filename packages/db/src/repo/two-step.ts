@@ -58,7 +58,22 @@ export interface TwoStepState {
   enrolledAt: Date | null;
   /** Recovery codes still unspent. Zero is worth saying on screen. */
   codesLeft: number;
+  /**
+   * HRT-438. When this account was made, which decides whether the
+   * requirement applies to it. Null for an account with no mirror row yet.
+   */
+  accountMadeAt: Date | null;
 }
+
+/**
+ * HRT-438, R1.8. The day a second factor became part of signing up.
+ *
+ * Accounts made before it are left alone: the requirement is for people
+ * joining, not a thing that locks somebody out of a church they are already
+ * running on a morning they were not expecting it. Moving this date forward
+ * is how the rule is widened, deliberately and in one place.
+ */
+export const TWO_STEP_REQUIRED_FROM = new Date("2026-10-19T00:00:00Z");
 
 /**
  * What a session needs to know about this person's second factor.
@@ -67,9 +82,12 @@ export interface TwoStepState {
  * be counted here.
  */
 export async function twoStepFor(userId: string): Promise<TwoStepState> {
-  const rows = await owner()<{ enrolled_at: Date | null; codes_left: string }[]>`
+  const rows = await owner()<{
+    enrolled_at: Date | null; codes_left: string; made_at: Date;
+  }[]>`
     select
       u.mfa_enrolled_at as enrolled_at,
+      u.created_at as made_at,
       (select count(*) from account_recovery_codes c
         where c.user_id = u.id and c.used_at is null)::text as codes_left
     from app_users u
@@ -77,8 +95,12 @@ export async function twoStepFor(userId: string): Promise<TwoStepState> {
    limit 1`;
 
   const found = rows[0];
-  if (!found) return { enrolledAt: null, codesLeft: 0 };
-  return { enrolledAt: found.enrolled_at, codesLeft: Number(found.codes_left) };
+  if (!found) return { enrolledAt: null, codesLeft: 0, accountMadeAt: null };
+  return {
+    enrolledAt: found.enrolled_at,
+    codesLeft: Number(found.codes_left),
+    accountMadeAt: found.made_at,
+  };
 }
 
 /** Called once Supabase has accepted the first code from their app. */

@@ -5,7 +5,7 @@
  * marked "use client" actually name. Run `pnpm catalogue` after changing a
  * screen's words; CI fails if this file is stale.
  *
- * 3982 of 5653 keys.
+ * 3983 of 5658 keys.
  */
 import type { Catalogue } from "../core";
 
@@ -492,6 +492,7 @@ export const browserWords: Catalogue = {
   "twoStep.appGoogle": "Google Authenticator",
   "twoStep.appMicrosoft": "Microsoft Authenticator",
   "twoStep.appsTail": "and other compatible apps.",
+  "twoStep.required.continue": "Continue",
   "twoStep.usePasskey": "Use a passkey",
   "twoStep.signInPasskey": "Use your passkey",
   "twoStep.error.passkey": "Couldn't set up a passkey on this device. Try an authenticator app instead.",

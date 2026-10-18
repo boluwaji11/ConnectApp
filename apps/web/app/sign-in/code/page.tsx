@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { SignOutLink } from "@/components/sign-out-link";
 import { t } from "@connectapp/i18n";
 import { currentUser } from "@/lib/session";
 import { presentable } from "@/lib/two-step";
@@ -69,9 +69,7 @@ export default async function TwoStepCode({
       title={t("twoStep.signInTitle")}
       under={t("twoStep.signInLede")}
       footer={
-        <Link href="/auth/sign-out" className="font-medium text-primary">
-          {t("twoStep.signOut")}
-        </Link>
+<SignOutLink label="twoStep.signOut" />
       }
     >
       <CodeForm

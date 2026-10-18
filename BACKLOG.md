@@ -1140,7 +1140,7 @@ of money and after everything else.
 | HRT-435 | Append-only enforced in the database, not by the absence of a writer | R1.11, R8.x | Open |
 | HRT-436 | The station forgets a church when it is signed out of | R8.20, R21.2 | Open |
 | HRT-437 | Two-step verification: enrolment, the challenge at sign-in, and recovery codes | R1.8, R21.4 | Resolved |
-| HRT-438 | Two-step required of anybody who can read member information, at sign-up | R1.8, R21.4 | Open |
+| HRT-438 | Two-step required of anybody who can read member information, at sign-up | R1.8, R21.4 | Active, the gate is not firing on page navigations |
 | HRT-439 | Two-step on the operator portal, which has cross-church reach | R1.8, R21.4 | Resolved |
 | HRT-440 | One command to deploy: migrations, environment drift, then the push | R21.x | Resolved |
 | HRT-441 | An owner who loses their phone can be let back in, by an operator | R1.8, R21.4 | Resolved |

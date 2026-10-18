@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { teamMemberBeforeTwoStep } from "@/lib/admin";
 import { standing } from "@/lib/two-step";
 import { Door } from "./door";
 import { CodeForm } from "./form";
+import { Leave } from "./leave";
 
 export const dynamic = "force-dynamic";
 
@@ -31,9 +31,7 @@ export default async function TwoStepPage() {
         <>
           Lost your phone? Ask another operator to clear it from the security
           screen.{" "}
-          <Link href="/sign-in" className="font-medium text-primary">
-            Sign in as someone else
-          </Link>
+<Leave />
         </>
       }
     >

@@ -12,6 +12,7 @@ export {
   CAN_READ_CONFIDENTIAL_NOTES, CAN_READ_GIVING_AMOUNTS,
   canEditPeople, canArchivePeople, canAnswerMessages,
   CAN_EDIT_PEOPLE, CAN_ARCHIVE_PEOPLE, PermissionError,
+  needsTwoStep, TWO_STEP_PERMISSIONS,
   type PermissionAction,
 } from "./roles";
 export {
@@ -177,7 +178,7 @@ export {
 } from "./repo/membership";
 export {
   twoStepFor, markTwoStepOn, markTwoStepOff, issueRecoveryCodes, spendRecoveryCode,
-  RECOVERY_CODE_COUNT, type TwoStepState,
+  RECOVERY_CODE_COUNT, TWO_STEP_REQUIRED_FROM, type TwoStepState,
 } from "./repo/two-step";
 export {
   churchForSelfSignup, joinChurch, setSelfSignup,

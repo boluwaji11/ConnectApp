@@ -3,6 +3,7 @@ import { teamMemberBeforeTwoStep } from "@/lib/admin";
 import { standing } from "@/lib/two-step";
 import { Door } from "../door";
 import { Enrol } from "./enrol";
+import { Leave } from "../leave";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function SetUpPage() {
     <Door
       title="Set up two-step verification"
       lede="The portal reaches every church on the platform, so a password on its own is not enough. This takes a minute and you only do it once."
-      foot={<>Signed in as {who.email}</>}
+      foot={<>Signed in as {who.email}. <Leave /></>}
     >
       <Enrol alreadyOn={two.enrolled} codesLeft={two.codesLeft} />
     </Door>

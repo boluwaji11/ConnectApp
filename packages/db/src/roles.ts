@@ -1,5 +1,5 @@
 import { t } from "@connectapp/i18n";
-import { can, rolesWith, type TenantRole, type Who } from "./permissions";
+import { can, rolesWith, type TenantRole, type Who, type Permission } from "./permissions";
 
 export {
   TENANT_ROLES, PERMISSIONS, PERMISSION_GROUPS, ROLE_PERMISSIONS, can, rolesWith,
@@ -83,3 +83,54 @@ export type PermissionAction =
   | "manageForms" | "editRoles" | "manageHouseholds" | "buildReports"
   | "manageGiving" | "recordGift" | "readGivingAmounts" | "manageWebsite"
   | "readPeople" | "readReports";
+
+/**
+ * HRT-438, R1.8, R21.4. The permissions that make a second factor mandatory.
+ *
+ * "Anyone who can see member information." A plain member holds none of
+ * these: their role is empty and every screen that reads the directory, the
+ * children's records, the giving or the church's settings refuses them. So
+ * the rule catches the people whose account is worth stealing and leaves a
+ * volunteer on a phone alone.
+ *
+ * Children's check-in is in the list because a station shows allergies,
+ * pickup lists and the codes that release a child. Giving is in it because
+ * the amounts name the giver. `church.manage` is in it because somebody who
+ * can change roles can grant themselves the rest.
+ */
+export const TWO_STEP_PERMISSIONS: readonly Permission[] = [
+  "members.edit",
+  "members.archive",
+  "members.households",
+  "members.notes.confidential",
+  "checkin.run",
+  "checkin.supervise",
+  "checkin.incidents",
+  "checkin.checks",
+  "giving.amounts",
+  "giving.manage",
+  "church.manage",
+  /*
+   * A group or team leader reads the roster of the group they lead and its
+   * attendance history, which is member information even though it is a
+   * narrower slice of it than the staff directory. Included because the rule
+   * was asked for with no exception, and because the cost of being wrong the
+   * other way is somebody's records.
+   *
+   * It is the line most worth arguing about: these are volunteers, and the
+   * product is built not to lose volunteers to friction. Taking them out is
+   * deleting two lines.
+   */
+  "groups.lead",
+  "teams.lead",
+];
+
+/**
+ * HRT-438. Whether this membership has to have a second factor.
+ *
+ * Asked of the permissions rather than of the nine built-in names, because a
+ * church writes its own roles and one of them holding `members.edit` is as
+ * much reach as Admin.
+ */
+export const needsTwoStep = (role: Who): boolean =>
+  TWO_STEP_PERMISSIONS.some((one) => can(role, one));
