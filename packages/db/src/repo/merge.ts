@@ -115,6 +115,28 @@ const KEYS: Record<string, string> = Object.fromEntries(
   OWNED.filter((o) => o.key).map((o) => [o.table, o.key!]),
 );
 
+/**
+ * SEC-027. The table and column names this file will ever put in a statement.
+ *
+ * `undoMerge` reads them back out of `person_merges.moved_rows`, a jsonb column
+ * written by the merge itself from the list above, and used them as SQL
+ * identifiers. Nothing in the product writes that column from anything a
+ * caller sends, so there is no path to it today, but a value that has been to
+ * the database and back is not the same thing as a constant, and an identifier
+ * is the one position a parameter cannot occupy. Checked against the list it
+ * is supposed to have come from, so the question does not arise.
+ */
+const ALLOWED_COLUMNS: Record<string, Set<string>> = OWNED.reduce(
+  (all, one) => {
+    const columns = all[one.table] ?? new Set<string>();
+    columns.add(one.column);
+    if (one.key) columns.add(one.key);
+    all[one.table] = columns;
+    return all;
+  },
+  {} as Record<string, Set<string>>,
+);
+
 export interface MergePlan {
   winnerId: string;
   loserId: string;
@@ -363,6 +385,13 @@ export async function undoMerge(
       : [row.table, row.table === "member_tags" ? "member_id" : row.table === "custom_field_values" ? "entity_id" : "member_id"];
 
     const key = KEYS[table!] ?? "id";
+
+    /* SEC-027. Only a pair this file could have written. */
+    const columns = ALLOWED_COLUMNS[table ?? ""];
+    if (!columns || !columns.has(column ?? "") || !(key === "id" || columns.has(key))) {
+      throw new InvalidInputError("merge.error.notFound");
+    }
+
     const result = (await db.execute(sql`
       update ${sql.identifier(table!)}
          set ${sql.identifier(column!)} = ${merge.loserId}::uuid

@@ -92,7 +92,19 @@ async function assertRecordable(db: Tx, occurrenceId: string): Promise<string> {
  */
 async function syncFirstVisit(db: Tx, personIds: string[]): Promise<void> {
   if (personIds.length === 0) return;
-  const ids = sql.raw(`array[${personIds.map((id) => `'${id}'`).join(",")}]::uuid[]`);
+
+  /*
+   * SEC-027. Each id a parameter, rather than quoted into the statement.
+   *
+   * This built `array['<id>','<id>']::uuid[]` by concatenation, and the ids
+   * reach it from a server action's own argument. Nothing exploitable came of
+   * it: both callers run an insert or a delete against a uuid column with the
+   * same values first, so a malformed id aborts the transaction before this
+   * statement is parsed. That is a protection by accident, not by design, and
+   * it lasts exactly as long as nobody reorders those two statements or adds a
+   * third caller. One `sql.join` removes the question.
+   */
+  const ids = sql`array[${sql.join(personIds.map((id) => sql`${id}`), sql`, `)}]::uuid[]`;
 
   await db.execute(sql`
     update members p
