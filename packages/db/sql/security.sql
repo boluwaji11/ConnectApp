@@ -441,9 +441,12 @@ end $$;
 -- the people repository, the importer, the seed script and whatever is written
 -- next, and a rule enforced in four of those five places is not a rule.
 
+-- HRT-425, SEC-012. Pinned to nothing, with `public.campuses` written out
+-- below, so no caller's path decides which table this reads.
 create or replace function public.campus_default() returns trigger
 language plpgsql
 security invoker
+set search_path = ''
 as $$
 declare v_campus uuid;
 begin
@@ -544,6 +547,144 @@ alter table public.audit_entries no force row level security;
 drop policy if exists tenant_isolation on public.audit_entries;
 create policy tenant_isolation on public.audit_entries
   using (tenant_id = app_tenant_id()) with check (tenant_id = app_tenant_id());
+
+-- ---------------------------------------------------------------------------
+-- 6b. Append only, enforced here rather than by the absence of a writer
+-- ---------------------------------------------------------------------------
+-- HRT-435, R1.11, R8.x. Three records are promised to be append only: the audit
+-- log, the operator log, and a child's incident report.
+--
+-- Two of those promises were kept by a revoke and the third by nobody writing
+-- the update. A revoke stops `hearth_app`, which is every request, and stops
+-- nothing on the owner connection, which is the seed, the queue worker, every
+-- script in `packages/db/scripts` and whatever is written next. `PRD` R8.13
+-- says an incident report has no edit and no delete "not for an Owner either",
+-- and the thing standing behind that sentence was a habit.
+--
+-- A trigger is what the sentence actually needs. It fires for the table owner
+-- as well, so the only way past it is `alter table ... disable trigger`, which
+-- is a deliberate act by somebody holding the database, not a mistyped
+-- `delete` in a maintenance script at midnight.
+--
+-- The escape is the one the audit trigger already uses and for the same
+-- reason: removing a church cascades into all three, and a reset is not
+-- somebody tampering with a record. `app.purge` is honoured only off the
+-- request path, exactly as `app.audit_off` is, so a query layer that could
+-- turn this off is not one of the things that exists.
+
+create or replace function public.append_only() returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  -- The maintenance escape, honoured for the owner connection only. Setting it
+  -- as hearth_app changes nothing, which is what keeps the request path from
+  -- being able to erase what it did.
+  if coalesce(current_setting('app.purge', true), '') = '1'
+     and current_user <> 'hearth_app' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+
+  raise exception 'public.% is append only, so % is refused', tg_table_name, tg_op
+    using errcode = 'restrict_violation',
+          hint = 'A record kept so somebody can ask what happened is worth nothing if it can be tidied up afterwards.';
+end $$;
+
+revoke all on function public.append_only() from public;
+
+-- R8.13. The incident report, which has one field that moves.
+--
+-- Telling a guardian usually happens after the report is written, so those
+-- three columns change once and the moment is kept with them. Everything else
+-- about what happened in that room is fixed, and "told" never becomes "not
+-- told": an incident whose notification could be unset is an incident whose
+-- handling can be rewritten.
+create or replace function public.incident_append_only() returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  was jsonb;
+  now_ jsonb;
+begin
+  if coalesce(current_setting('app.purge', true), '') = '1'
+     and current_user <> 'hearth_app' then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE' then
+    was  := to_jsonb(old) - 'guardian_notified' - 'notified_at' - 'notified_by';
+    now_ := to_jsonb(new) - 'guardian_notified' - 'notified_at' - 'notified_by';
+
+    if was is distinct from now_ then
+      raise exception 'an incident report is not edited, only its notification is recorded'
+        using errcode = 'restrict_violation';
+    end if;
+
+    if old.guardian_notified and not new.guardian_notified then
+      raise exception 'a guardian who has been told is not untold'
+        using errcode = 'restrict_violation';
+    end if;
+
+    return new;
+  end if;
+
+  raise exception 'an incident report is kept, so % is refused', tg_op
+    using errcode = 'restrict_violation';
+end $$;
+
+revoke all on function public.incident_append_only() from public;
+
+do $$
+declare t text;
+begin
+  -- The audit log and the operator log take nothing but inserts.
+  foreach t in array array['audit_entries', 'platform_events']
+  loop
+    if to_regclass('public.' || t) is null then continue; end if;
+
+    -- Named `keep_` rather than `audit_`. The coverage test counts triggers
+    -- whose name starts with `audit_` to decide whether a table is audited,
+    -- so a guard called `audit_entries_append_only` reads to it as an audit
+    -- trigger on the audit log, which is the one thing that must not have one.
+    execute format('drop trigger if exists %1$s_append_only on public.%1$I', t);
+    execute format('drop trigger if exists keep_%1$s on public.%1$I', t);
+    execute format(
+      'create trigger keep_%1$s before update or delete on public.%1$I'
+      || ' for each row execute function public.append_only()', t);
+
+    execute format('drop trigger if exists %1$s_no_truncate on public.%1$I', t);
+    execute format('drop trigger if exists keep_%1$s_whole on public.%1$I', t);
+    execute format(
+      'create trigger keep_%1$s_whole before truncate on public.%1$I'
+      || ' for each statement execute function public.append_only()', t);
+  end loop;
+
+  -- The incident report, with its one moving field.
+  if to_regclass('public.incident_reports') is not null then
+    drop trigger if exists incident_reports_append_only on public.incident_reports;
+    drop trigger if exists keep_incident_reports on public.incident_reports;
+    create trigger keep_incident_reports
+      before update or delete on public.incident_reports
+      for each row execute function public.incident_append_only();
+
+    drop trigger if exists incident_reports_no_truncate on public.incident_reports;
+    drop trigger if exists keep_incident_reports_whole on public.incident_reports;
+    create trigger keep_incident_reports_whole
+      before truncate on public.incident_reports
+      for each statement execute function public.incident_append_only();
+  end if;
+end $$;
+
+-- The grants say the same thing, so a reader of the privileges does not have to
+-- find the trigger to know the rule. `incident_reports` keeps UPDATE because of
+-- the notification columns; the trigger is what narrows it to those.
+revoke update, delete, truncate on public.audit_entries from hearth_app;
+revoke delete, truncate on public.incident_reports from hearth_app;
 
 -- ---------------------------------------------------------------------------
 -- 7. Nothing is reachable over the auto-generated REST API
@@ -867,16 +1008,18 @@ end $$;
 -- since the body runs with the caller's own privileges, but a caller who sets a
 -- hostile path still redirects which table the function reads.
 --
--- `campus_default` and the five slug helpers were created by migrations without
--- one. They are pinned here rather than rewritten, and to `public, pg_catalog`
--- rather than to the empty string, because their bodies name `members`,
--- `saved_reports` and `mailers` unqualified: an empty path would pin them to
--- failure instead of to safety. Fixed is the property that matters. Rewriting
--- those bodies to qualify every name, and then pinning them to nothing like the
--- rest, is HRT-425.
+-- HRT-425. `campus_default` and the slug helpers used to be pinned here to
+-- `public, pg_catalog`, because their bodies named `members`, `saved_reports`
+-- and `mailers` unqualified and an empty path would have pinned them to
+-- failure instead of to safety. Migration 0166 writes those names out and pins
+-- each of them to nothing, so every function in `public` now pins the empty
+-- path and this loop catches only something new that forgot to.
 --
 -- Anything created with a path already set is left exactly as it is, so this
--- cannot quietly widen one of the three that pin nothing.
+-- cannot quietly widen one that pins nothing. The fallback is still
+-- `public, pg_catalog` rather than the empty string: a new function whose body
+-- does not qualify its names would be pinned to failure otherwise, and the
+-- check below is what says so out loud.
 do $$
 declare f record;
 begin
@@ -894,4 +1037,37 @@ begin
   loop
     execute format('alter function %s set search_path = public, pg_catalog', f.sig);
   end loop;
+end $$;
+
+
+-- ---------------------------------------------------------------------------
+-- 10. Nothing in public resolves a name through the caller's path
+-- ---------------------------------------------------------------------------
+-- HRT-425, SEC-012. The section above guarantees every function has *a* fixed
+-- path. This one is the stronger property: that the path is empty, so every
+-- name a body resolves is written out in the body and there is nothing on a
+-- path for anybody to shadow.
+--
+-- It reports rather than refuses. A function added with an unqualified body
+-- and no path of its own is pinned to `public, pg_catalog` above, which is
+-- safe enough to run; failing the migration over it would stop a deployment
+-- for something that is already closed. The notice is what gets it fixed.
+do $$
+declare loose text;
+begin
+  select string_agg(p.proname, ', ' order by p.proname)
+    into loose
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.prokind = 'f'
+     and p.proname not like 'pg\_%'
+     and not exists (
+       select 1 from unnest(coalesce(p.proconfig, '{}')) as c
+        where c = 'search_path=""'
+     );
+
+  if loose is not null then
+    raise warning 'HRT-425: these functions pin a search_path with a schema on it, not an empty one: %', loose;
+  end if;
 end $$;

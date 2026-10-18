@@ -1127,7 +1127,7 @@ of money and after everything else.
 | HRT-422 | The export stops handing over the amounts a screen refuses | R19.8, R21.2, R13.11 | Resolved |
 | HRT-423 | A name of ours is not a church's to take, and a redirect is checked | R1.1, R1.4, R1.7, R17.1 | Resolved |
 | HRT-424 | The platform's own tables, and the privileges a blanket grant undid | R21.1, R21.3 | Resolved |
-| HRT-425 | The slug helpers name their tables, so they can pin an empty path | R21.1 | Open |
+| HRT-425 | The slug helpers name their tables, so they can pin an empty path | R21.1 | Resolved |
 | HRT-426 | The pickup list is asked even when nobody says who is collecting | R8.8, R8.9 | Resolved, needs a service day |
 | HRT-427 | The Resend handshake is bound to the browser that started it | R16.1, R21.15 | Resolved |
 | HRT-428 | Smaller boundaries: TLS, constant time, a key's shape, an owner, a thread | R21.15, R10.5, R16.14 | Resolved |
@@ -1137,7 +1137,7 @@ of money and after everything else.
 | HRT-432 | drizzle-orm to 0.45.x, behind the isolation suite | R21.1 | Open |
 | HRT-433 | The development gate applies to the demo host too | R21.3, R19.7 | Resolved |
 | HRT-434 | What an operator read, not only what they changed | R1.11, R21.3 | Open |
-| HRT-435 | Append-only enforced in the database, not by the absence of a writer | R1.11, R8.x | Open |
+| HRT-435 | Append-only enforced in the database, not by the absence of a writer | R1.11, R8.x | Resolved |
 | HRT-436 | The station forgets a church when it is signed out of | R8.20, R21.2 | Open |
 | HRT-437 | Two-step verification: enrolment, the challenge at sign-in, and recovery codes | R1.8, R21.4 | Resolved |
 | HRT-438 | Two-step required of anybody who can read member information, at sign-up | R1.8, R21.4 | Resolved |

@@ -69,6 +69,34 @@ describe("function search_path is pinned", () => {
     const unpinned = functions.filter((f) => !(f.config ?? []).some((c) => c.startsWith("search_path=")));
     expect(unpinned.map((f) => f.name)).toEqual([]);
   });
+
+  it("pins every one of them to nothing, not to a path with a schema on it", () => {
+    /*
+     * HRT-425. Fixed is not the same property as empty. A path with `public`
+     * on it still resolves a name through a schema, so a caller who can
+     * create an object there decides which table the body reads. With nothing
+     * on the path every name has to be written out in the body and there is
+     * nothing left to shadow.
+     *
+     * The slug helpers and `campus_default` were the five that named their
+     * tables unqualified and so had to be pinned to `public, pg_catalog`
+     * instead. Migration 0166 wrote those names out. `pg_catalog` is searched
+     * whether or not it is named, so the built-ins still resolve.
+     */
+    const loose = functions.filter(
+      (f) => !(f.config ?? []).some((c) => c === 'search_path=""'),
+    );
+    expect(loose.map((f) => f.name)).toEqual([]);
+  });
+
+  it("still answers with the slug helpers pinned to nothing", async () => {
+    /* The reason this waited: an empty path pins an unqualified body to
+       failure rather than to safety, and that failure is a church unable to
+       add a person. Proved rather than assumed. */
+    const rows = await owner()<{ slug: string | null }[]>`
+      select public.hearth_slug('Noah O''Brien-Smith!') as slug`;
+    expect(rows[0]?.slug).toBe("noah-obrien-smith");
+  });
 });
 
 describe("no SECURITY DEFINER surface", () => {

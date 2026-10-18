@@ -31,6 +31,15 @@ export async function withAuditTriggersOff<T>(
 ): Promise<T> {
   return owner().begin(async (tx) => {
     await tx`select set_config('app.audit_off', '1', true)`;
+    /*
+     * HRT-435. The same transaction, for the same reason.
+     *
+     * The audit log, the operator log and the incident reports refuse an
+     * update or a delete by trigger now, and removing a church cascades into
+     * all three. A reset is not somebody tampering with a record, so this says
+     * so once, here, where the removal already announces itself.
+     */
+    await tx`select set_config('app.purge', '1', true)`;
     return work(tx as unknown as Sql);
   }) as Promise<T>;
 }
