@@ -26,6 +26,44 @@ type Stage =
   | { at: "code"; factorId: string }
   | { at: "codes"; codes: string[] };
 
+/**
+ * R1.8. The two apps most people already have, as links to the real thing.
+ *
+ * Both point at the maker's own page rather than at a store, because the
+ * store a person needs depends on the phone in their hand and these pages
+ * carry both. Naming an app without a way to get it leaves somebody to search
+ * for "google authenticator" and meet whatever is top of the results, which on
+ * an app store is where the copies live.
+ */
+const APP_LINK =
+  "font-medium text-primary underline-offset-4 hover:underline";
+
+function AuthenticatorApps() {
+  return (
+    <p className="text-sm text-muted-foreground">
+      {t("twoStep.appsLead")}{" "}
+      <a
+        href="https://support.google.com/accounts/answer/1066447"
+        target="_blank"
+        rel="noreferrer noopener"
+        className={APP_LINK}
+      >
+        {t("twoStep.appGoogle")}
+      </a>
+      ,{" "}
+      <a
+        href="https://www.microsoft.com/en-us/security/mobile-authenticator-app"
+        target="_blank"
+        rel="noreferrer noopener"
+        className={APP_LINK}
+      >
+        {t("twoStep.appMicrosoft")}
+      </a>
+      , {t("twoStep.appsTail")}
+    </p>
+  );
+}
+
 /** The codes, as a block somebody can take away. */
 function Codes({ codes, onDone }: { codes: string[]; onDone: () => void }) {
   const [copied, setCopied] = React.useState(false);
@@ -179,7 +217,7 @@ export function TwoStep({
                   the lock was for. */}
               <div className="flex flex-col gap-1.5">
                 <p className="text-fg">{t("twoStep.lede")}</p>
-                <p className="text-sm text-muted-foreground">{t("twoStep.apps")}</p>
+                <AuthenticatorApps />
               </div>
               <Button type="button" onClick={begin} loading={pending} disabled={pending}>
                 {t("twoStep.turnOn")}
@@ -189,9 +227,10 @@ export function TwoStep({
 
           {stage.at === "scan" ? (
             <div className="flex flex-col items-center gap-4 text-center">
-              <p className="max-w-sm text-sm text-muted-foreground">
-                {t("twoStep.scan")} {t("twoStep.apps")}
-              </p>
+              <div className="flex max-w-sm flex-col gap-1.5">
+                <p className="text-sm text-muted-foreground">{t("twoStep.scan")}</p>
+                <AuthenticatorApps />
+              </div>
 
               {manual ? (
                 <div className="w-full max-w-sm">
