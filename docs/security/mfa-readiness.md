@@ -32,8 +32,36 @@ failed read must never be allowed to disable a second factor.
 `apps/web/tests/two-step.test.ts` is that bug.
 
 **Still to do: step 1, step 3 and step 4 below.** The operator portal has no
-MFA, no role is required to enrol, and there is no step-up. HRT-438 carries
-them.
+MFA, no role is required to enrol, and there is no step-up.
+
+### The order agreed on 18 October 2026
+
+The owner set this, and it moves the portal behind the product, which reverses
+the recommendation further down this page. The reason is that pilot churches
+start within weeks and a church signing up is the path that has to be right
+first; nine operators are a known, reachable group.
+
+1. **HRT-438, required of anybody who can read member information, at sign-up.**
+   An owner meets it while creating their church, and an invited person meets
+   it while setting their account up. Required rather than offered, and part of
+   the sign-up rather than a thing to come back to.
+2. **HRT-440, the deploy script.**
+3. **HRT-439, the operator portal.**
+
+**The rule is about permissions, not role names.** A church writes its own
+roles, so "can read member information" has to resolve through the matrix in
+`packages/db/src/permissions.ts` rather than through the nine built-in names.
+The `members` group there is `members.edit`, `members.archive`,
+`members.households` and `members.notes.confidential`, and `rolesWith()` in
+`packages/db/src/roles.ts` already resolves a permission to the roles holding
+it. Note that reading the directory is not itself one of those permissions, so
+the first question to settle in that story is which permission, or which read,
+is the line.
+
+**The thing to be most careful about:** this is the first rule that can stop
+somebody finishing their own church's sign-up. Recovery has to work before it
+turns on, and a church's first owner has nobody above them to reset it, so the
+operator reset path in step 3 of the rollout below stops being optional.
 
 R1.8 says password auth plus TOTP, **mandatory for Owner, Admin and Finance**.
 R21.4 repeats it. PRD section 13.9 records TOTP as one of the reasons Supabase
