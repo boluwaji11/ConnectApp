@@ -4,7 +4,7 @@ import {
   withTenant, createGroup, updateGroup, setGroupArchived,
   addToGroup, removeFromGroup, leaveGroup, lookupPeople, getChurch,
   requestToJoin, withdrawRequest, decideRequest, setGroupPhoto, setGroupOpen, setGroupStatus,
-  type GroupRole,
+  type GroupRole, canManageGroups, PermissionError,
 } from "@connectapp/db";
 import { explain } from "@/lib/explain";
 import { requireSession } from "@/lib/session";
@@ -153,7 +153,19 @@ export interface PersonHit {
 
 /** R9.4. Finding somebody to put in the group, by the name a leader knows. */
 export async function findPerson(query: string): Promise<PersonHit[]> {
-  const { session, ctx } = await context();
+  const { session, ctx, actor } = await context();
+    /*
+     * SEC-022. A picker is a read of the whole directory, so it asks the same
+     * permission the writes beside it ask.
+     *
+     * These returned name, address and household for anybody in the church to
+     * any signed-in account. The product has a separate member-facing
+     * directory whose default is name-only and whose visibility switches a
+     * member can turn off; this handed out the staff view instead, so a member
+     * who had turned every switch off was disclosed anyway.
+     */
+    if (!canManageGroups(actor)) throw new PermissionError(actor.role, "manageGroups");
+
   try {
     return await withTenant(ctx, async (tx) => {
       const profile = await getChurch(tx, session.tenantId);

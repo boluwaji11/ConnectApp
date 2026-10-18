@@ -1,7 +1,7 @@
 "use server";
 
 import {
-  withTenant, getChurch, peopleNotIn, enterPipeline, setEntryStage,
+  withTenant, getChurch, peopleNotIn, enterPipeline, setEntryStage, canFollowUp, PermissionError,
 } from "@connectapp/db";
 import { explain } from "@/lib/explain";
 import { requireSession } from "@/lib/session";
@@ -26,6 +26,18 @@ export async function findPeople(
   search: string,
   ): Promise<{ id: string; name: string }[]> {
   const { ctx } = await context();
+    /*
+     * SEC-022. A picker is a read of the whole directory, so it asks the same
+     * permission the writes beside it ask.
+     *
+     * These returned name, address and household for anybody in the church to
+     * any signed-in account. The product has a separate member-facing
+     * directory whose default is name-only and whose visibility switches a
+     * member can turn off; this handed out the staff view instead, so a member
+     * who had turned every switch off was disclosed anyway.
+     */
+    if (!canFollowUp(ctx)) throw new PermissionError(ctx.role, "manageFollowUps");
+
   return withTenant(ctx, (tx) => peopleNotIn(tx, pipelineId, search));
 }
 

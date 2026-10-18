@@ -8,7 +8,7 @@ import {
   emailRecipientsFor, findEmailRecipients, wayOutForAll, wayOutKey, startSend,
   emailProvider, readSend, restoreConsent, cancelSend,
   listSends, listWithdrawn, countAllWithdrawn,
-  type Audience,
+  type Audience, canManageChurch, PermissionError,
 } from "@connectapp/db";
 import { t } from "@connectapp/i18n";
 import { markdownToHtml } from "@/lib/rich-text";
@@ -37,13 +37,39 @@ export interface SendResult {
   sendId?: string;
 }
 
+/**
+ * SEC-022. Who this screen's actions belong to.
+ *
+ * Every action in this file is about the church's own mail: who it would
+ * reach, what has been sent, who has asked to be left alone, and sending.
+ * Sending was refused in the repository and the screen refuses a reader who
+ * may not manage the church, but the five reads were refused nowhere.
+ *
+ * So a plain member could count an audience and take three addresses off it, a
+ * query at a time, which is the directory one call at a time; could search
+ * recipients by name and read the address back; could open any past send and
+ * read its whole body; and could list everybody who had unsubscribed. The
+ * permission is checked here so it covers the actions added after this one.
+ *
+ * `actor` carries the permissions as well. Without them a church that wrote
+ * its own role would be judged by the built-in matrix and refused its own
+ * grant.
+ */
 async function context() {
   const session = await requireSession();
   const h = await headers();
   const forwarded = h.get("x-forwarded-for");
+
+  if (!canManageChurch(session)) throw new PermissionError(session.role, "editChurch");
+
   return {
     session,
-    actor: { tenantId: session.tenantId, role: session.role, userId: session.userId },
+    actor: {
+      tenantId: session.tenantId,
+      role: session.role,
+      userId: session.userId,
+      permissions: session.permissions,
+    },
     ctx: {
       tenantId: session.tenantId,
       role: session.role,

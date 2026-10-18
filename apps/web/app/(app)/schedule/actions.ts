@@ -7,7 +7,7 @@ import {
   lookupPeople, listPeople, getChurch,
   assign, unassign, candidatesFor,
   userForPerson,
-  type TeamRole, type TagHue, type PlanCandidate,
+  type TeamRole, type TagHue, type PlanCandidate, canManageTeams, PermissionError,
 } from "@connectapp/db";
 import { t } from "@connectapp/i18n";
 import { explain } from "@/lib/explain";
@@ -173,7 +173,19 @@ export interface PersonHit {
 
 /** R10.1. Finding somebody to put on the team, by the name a leader knows. */
 export async function findPerson(query: string): Promise<PersonHit[]> {
-  const { session, ctx } = await context();
+  const { session, ctx, actor } = await context();
+    /*
+     * SEC-022. A picker is a read of the whole directory, so it asks the same
+     * permission the writes beside it ask.
+     *
+     * These returned name, address and household for anybody in the church to
+     * any signed-in account. The product has a separate member-facing
+     * directory whose default is name-only and whose visibility switches a
+     * member can turn off; this handed out the staff view instead, so a member
+     * who had turned every switch off was disclosed anyway.
+     */
+    if (!canManageTeams(actor)) throw new PermissionError(actor.role, "manageTeams");
+
   try {
     return await withTenant(ctx, async (tx) => {
       const profile = await getChurch(tx, session.tenantId);
@@ -256,7 +268,19 @@ export async function unschedule(id: string): Promise<ScheduleResult> {
 export async function whoCouldFill(
   input: { teamId: string; positionId: string; occurrenceId: string },
   ): Promise<PlanCandidate[]> {
-  const { ctx } = await context();
+  const { ctx, actor } = await context();
+    /*
+     * SEC-022. A picker is a read of the whole directory, so it asks the same
+     * permission the writes beside it ask.
+     *
+     * These returned name, address and household for anybody in the church to
+     * any signed-in account. The product has a separate member-facing
+     * directory whose default is name-only and whose visibility switches a
+     * member can turn off; this handed out the staff view instead, so a member
+     * who had turned every switch off was disclosed anyway.
+     */
+    if (!canManageTeams(actor)) throw new PermissionError(actor.role, "manageTeams");
+
   try {
     return await withTenant(ctx, (tx) => candidatesFor(tx, input));
   } catch {

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import {
   withTenant, createHousehold, renameHousehold, setHouseholdArchived, mergeHouseholds,
   peopleWithoutHousehold, addToHousehold, removeFromHousehold, setHouseholdRole,
-  setHouseholdAddress,
+  setHouseholdAddress, canManageHouseholds, PermissionError,
 } from "@connectapp/db";
 import { explain } from "@/lib/explain";
 import { requireSession } from "@/lib/session";
@@ -99,6 +99,12 @@ export async function freePeople(
   search: string,
   ): Promise<{ id: string; slug: string; name: string }[]> {
   const who = await actor();
+  /*
+   * SEC-022. A picker is a read of the directory, so it asks what the writes
+   * beside it ask. This returned everybody in the church who is not yet in a
+   * household, to any signed-in account.
+   */
+  if (!canManageHouseholds(who)) throw new PermissionError(who.role, "manageHouseholds");
   return withTenant(who, (tx) => peopleWithoutHousehold(tx, search));
 }
 

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import {
   withTenant, bulkSetArchived, bulkSetStatus, bulkSetPersonTag, listPeople, addManyToGroup,
-  type LifecycleStatus,
+  type LifecycleStatus, canEditPeople, PermissionError,
 } from "@connectapp/db";
 import { t } from "@connectapp/i18n";
 import { requireSession } from "@/lib/session";
@@ -113,6 +113,18 @@ export async function matchingIds(
 /** R9.4. Putting the members on screen into a group, in one go. */
 export async function bulkAddToGroup(data: FormData): Promise<BulkResult> {
   const { actor, ctx } = await context();
+    /*
+     * SEC-022. A picker is a read of the whole directory, so it asks the same
+     * permission the writes beside it ask.
+     *
+     * These returned name, address and household for anybody in the church to
+     * any signed-in account. The product has a separate member-facing
+     * directory whose default is name-only and whose visibility switches a
+     * member can turn off; this handed out the staff view instead, so a member
+     * who had turned every switch off was disclosed anyway.
+     */
+    if (!canEditPeople(actor)) throw new PermissionError(actor.role, "editPerson");
+
   const ids = selection(data);
   const groupId = field(data, "groupId");
   if (!groupId || ids.length === 0) return { changed: 0 };

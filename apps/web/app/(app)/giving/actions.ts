@@ -356,6 +356,18 @@ export async function amendCount(
   },
   ): Promise<GivingResult> {
   const { actor, ctx } = await context();
+    /*
+     * SEC-022. A picker is a read of the whole directory, so it asks the same
+     * permission the writes beside it ask.
+     *
+     * These returned name, address and household for anybody in the church to
+     * any signed-in account. The product has a separate member-facing
+     * directory whose default is name-only and whose visibility switches a
+     * member can turn off; this handed out the staff view instead, so a member
+     * who had turned every switch off was disclosed anyway.
+     */
+    if (!canManageGiving(actor)) throw new PermissionError(actor.role, "manageGiving");
+
   try {
     await withTenant(ctx, (tx) => amendBatch(tx, actor, id, input));
     revalidatePath("/giving");
