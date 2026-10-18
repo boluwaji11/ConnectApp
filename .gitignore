@@ -81,3 +81,6 @@ next-env.d.ts
 # The security review's working notes. Traced paths and payloads, for the
 # maintainers. docs/security-audit.md is the public record.
 security-audit-private.md
+
+# Rendered by packages/mail/scripts/preview.mjs, for looking at.
+email-previews/
