@@ -734,7 +734,6 @@ export const en = {
   "fields.add": "Add custom field",
   "nav.account": "Account",
   "demo.start": "See a demo",
-  "demo.starting": "Creating a demo church",
   "demo.banner.title": "This is a demo church",
   "demo.banner.body": "Everyone in it is invented. It is removed {when}.",
   "demo.banner.signUp": "Create a church account",
