@@ -3,6 +3,7 @@ import { SettingsHeading } from "../heading";
 import { Security } from "./security";
 import { TwoStep } from "./two-step";
 import { twoStepFor } from "@connectapp/db";
+import { relyingParty } from "@/lib/passkey";
 import { t } from "@connectapp/i18n";
 import { tabMetadata } from "@/lib/page-metadata";
 
@@ -24,6 +25,10 @@ export default async function SecurityPage() {
   /* R1.8. The mirror, not Supabase: this screen draws the state, it does not
      act on a factor until somebody presses something. */
   const twoStep = await twoStepFor(session.userId);
+  /* R1.8, R21.1. Null on a church's own domain, where a key bound to our name
+     would not work. The decision is made on the server for the reason
+     lib/passkey.ts gives. */
+  const passkey = await relyingParty();
 
   return (
     <>
@@ -33,6 +38,7 @@ export default async function SecurityPage() {
         <TwoStep
           enrolled={twoStep.enrolledAt !== null}
           codesLeft={twoStep.codesLeft}
+          passkey={passkey}
         />
       </div>
     </>

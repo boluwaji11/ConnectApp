@@ -24,6 +24,8 @@ import { supabaseServer } from "./supabase/server";
 /** A factor Supabase holds for this person. */
 export interface Factor {
   id: string;
+  /** An authenticator app, or a passkey held by the device. */
+  kind: "totp" | "webauthn";
   /** Only a verified factor is ever challenged. An abandoned enrolment is not. */
   verified: boolean;
 }
@@ -46,13 +48,34 @@ export const factors = cache(async (): Promise<{ held: Factor[] | null }> => {
   const supabase = await supabaseServer();
   const { data, error } = await supabase.auth.mfa.listFactors();
   if (error || !data) return { held: null };
+  /* Both kinds, because a person may hold either and the screens offer both. */
+  const all = [
+    ...(data.totp ?? []).map((one) => ({ one, kind: "totp" as const })),
+    ...((data as unknown as { webauthn?: { id: string; status: string }[] }).webauthn ?? [])
+      .map((one) => ({ one, kind: "webauthn" as const })),
+  ];
+
   return {
-    held: (data.totp ?? []).map((one) => ({
+    held: all.map(({ one, kind }) => ({
       id: one.id,
+      kind,
       verified: one.status === "verified",
     })),
   };
 });
+
+/** The verified factors, by kind, for a screen deciding what to offer. */
+export async function presentable(): Promise<
+  { known: true; totp: string | null; passkey: string | null } | { known: false }
+> {
+  const { held } = await factors();
+  if (held === null) return { known: false };
+  return {
+    known: true,
+    totp: held.find((o) => o.verified && o.kind === "totp")?.id ?? null,
+    passkey: held.find((o) => o.verified && o.kind === "webauthn")?.id ?? null,
+  };
+}
 
 /**
  * The one factor a challenge is made against.
@@ -87,7 +110,9 @@ export async function beginEnrolment(): Promise<Enrolment | { error: string }> {
   const supabase = await supabaseServer();
 
   for (const one of (await factors()).held ?? []) {
-    if (!one.verified) await supabase.auth.mfa.unenroll({ factorId: one.id });
+    if (!one.verified && one.kind === "totp") {
+      await supabase.auth.mfa.unenroll({ factorId: one.id });
+    }
   }
 
   const { data, error } = await supabase.auth.mfa.enroll({

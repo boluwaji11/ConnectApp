@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { t } from "@connectapp/i18n";
 import { currentUser } from "@/lib/session";
-import { presentableFactor } from "@/lib/two-step";
+import { presentable } from "@/lib/two-step";
+import { relyingParty } from "@/lib/passkey";
 import { twoStepFor } from "@connectapp/db";
 import { landingFor } from "@/lib/landing";
 import { safePath } from "@/lib/safe-redirect";
@@ -59,7 +60,9 @@ export default async function TwoStepCode({
    * the recovery codes they were given at enrolment, and that path turns
    * two-step off against a secret rather than against a failed request.
    */
-  const factor = await presentableFactor();
+  const [held, party] = await Promise.all([presentable(), relyingParty()]);
+  /* Nothing to present, as far as Supabase could be asked. */
+  const gone = held.known && !held.totp && !held.passkey;
 
   return (
     <AuthShell
@@ -71,7 +74,13 @@ export default async function TwoStepCode({
         </Link>
       }
     >
-      <CodeForm next={next} gone={factor === null} />
+      <CodeForm
+        next={next}
+        gone={gone}
+        passkey={held.known && held.passkey && party
+          ? { factorId: held.passkey, party }
+          : null}
+      />
     </AuthShell>
   );
 }
