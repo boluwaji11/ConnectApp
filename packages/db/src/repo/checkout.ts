@@ -130,7 +130,7 @@ async function restrictedAgainst(db: Tx, childId: string): Promise<string[]> {
 export interface CheckoutBlock {
   kind: OverrideKind;
   /** The catalogue key naming what stopped it. */
-  key: "checkout.block.code" | "checkout.block.pickup" | "checkout.block.restriction";
+  key: `checkout.block.${OverrideKind}`;
 }
 
 export interface CheckoutResult {
@@ -172,10 +172,18 @@ export async function checkOut(
 
   const override = request.override ?? null;
 
-  const restricted = request.collectedBy ? await restrictedAgainst(db, visit.memberId) : [];
-  const allowed = request.collectedBy
-    ? (await pickupList(db, visit.memberId)).map((p) => p.id)
-    : [];
+  /*
+   * SEC-013. Both lists, whether or not somebody was named.
+   *
+   * They used to be read only when a collector was named, which is the same
+   * mistake as the rule itself: the lists cannot be the control if they are not
+   * in the room. The rule needs to know whether this child has either of them
+   * on record before it can decide what an unnamed collector means.
+   */
+  const [restricted, allowed] = await Promise.all([
+    restrictedAgainst(db, visit.memberId),
+    pickupList(db, visit.memberId).then((list) => list.map((p) => p.id)),
+  ]);
 
   const stopped = releaseBlock({
     kind: visit.kind === "adult" ? "adult" : "child",

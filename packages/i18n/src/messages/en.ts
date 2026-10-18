@@ -5339,6 +5339,7 @@ export const en = {
   "checkout.block.code": "That code does not match.",
   "checkout.block.pickup": "They are not on the list of people approved to collect this child.",
   "checkout.block.restriction": "There is a restriction between this child and this member.",
+  "checkout.block.unnamed": "Say who is collecting this child. Their record names who may.",
   "checkin.error.code": "A code couldn't be issued. Try again.",
   "checkin.error.collected": "They have already been collected.",
   "station.error.name": "Enter a name for the station.",

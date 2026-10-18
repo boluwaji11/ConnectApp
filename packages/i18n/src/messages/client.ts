@@ -5,7 +5,7 @@
  * marked "use client" actually name. Run `pnpm catalogue` after changing a
  * screen's words; CI fails if this file is stale.
  *
- * 3911 of 5541 keys.
+ * 3912 of 5542 keys.
  */
 import type { Catalogue } from "../core";
 
@@ -3715,6 +3715,7 @@ export const browserWords: Catalogue = {
   "checkout.block.code": "That code does not match.",
   "checkout.block.pickup": "They are not on the list of people approved to collect this child.",
   "checkout.block.restriction": "There is a restriction between this child and this member.",
+  "checkout.block.unnamed": "Say who is collecting this child. Their record names who may.",
   "station.error.name": "Enter a name for the station.",
   "station.error.nameLong": "That name is too long.",
   "station.error.mode": "Choose what this station is.",

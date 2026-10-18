@@ -173,6 +173,39 @@ describe("the pickup list (R8.8)", () => {
     expect(result.released).toBe(false);
     expect(result.block?.kind).toBe("pickup");
   });
+
+  /*
+   * SEC-013. Through the real path, because the pure rule only proves the
+   * decision and not that the lists reached it. `checkOut` read both lists
+   * only when a collector was named, so the rule was handed two empty arrays
+   * for exactly the case that mattered.
+   */
+  it("stops a release where nobody said who is collecting", async () => {
+    const visit = await freshVisit();
+    const result = await run((tx) => checkOut(tx, as(), {
+      visitId: visit.id, code: visit.code, collectedBy: null,
+    }));
+
+    expect(result.released).toBe(false);
+    expect(result.block?.kind).toBe("unnamed");
+  });
+
+  it("releases on a recorded decision, and writes the reason down", async () => {
+    const visit = await freshVisit();
+    const result = await run((tx) => checkOut(tx, as(), {
+      visitId: visit.id,
+      code: visit.code,
+      collectedBy: null,
+      override: { kind: "unnamed", reason: "Grandmother, known to the room leader" },
+    }));
+
+    expect(result.released).toBe(true);
+
+    const [row] = await owner()<{ reason_kind: string; reason: string }[]>`
+      select reason_kind, reason from checkin_overrides where visit_id = ${visit.id}`;
+    expect(row?.reason_kind).toBe("unnamed");
+    expect(row?.reason).toContain("Grandmother");
+  });
 });
 
 describe("a restriction (R8.9)", () => {
@@ -294,6 +327,79 @@ describe("the release rule", () => {
 
   it("lets a child go on the code that was printed", () => {
     expect(releaseBlock(base)).toBeNull();
+  });
+
+  /*
+   * SEC-013, R8.8, R8.9. The list is the control, so it is asked even when
+   * nobody says who is collecting.
+   *
+   * Both the restriction check and the pickup check sat inside
+   * `if (q.collectedBy)`. The checkout dialog opens with nobody selected and
+   * its last option is "someone else", which maps to null, so the ordinary
+   * path through the screen released a child on the code alone: no list was
+   * consulted, no override was involved, and therefore no reason was asked for
+   * and no row was written. A person a court order names was released by that
+   * path provided they did not say who they were.
+   */
+  describe("an unnamed collector", () => {
+    it("is refused for a child whose records name who may collect them", () => {
+      expect(releaseBlock({ ...base, allowed: ["mum"] })).toBe("unnamed");
+    });
+
+    it("is refused for a child with a restriction on record", () => {
+      expect(releaseBlock({ ...base, restricted: ["ex"] })).toBe("unnamed");
+    });
+
+    it("is refused even when the code is right, because the code is not the question", () => {
+      expect(releaseBlock({ ...base, typed: "AB3DE", allowed: ["mum"] })).toBe("unnamed");
+    });
+
+    it("still needs the code once somebody has decided about the name", () => {
+      expect(
+        releaseBlock({ ...base, typed: "WRONG", allowed: ["mum"], override: { kind: "unnamed" } }),
+      ).toBe("code");
+    });
+
+    it("goes through on a recorded decision, which is what writes the reason down", () => {
+      expect(
+        releaseBlock({ ...base, allowed: ["mum"], override: { kind: "unnamed" } }),
+      ).toBeNull();
+    });
+
+    it("is not asked of a church that has recorded neither list", () => {
+      /* A church with no pickup lists filled in is not made to justify every
+         release, which is what made "someone else" the habit. */
+      expect(releaseBlock(base)).toBeNull();
+    });
+
+    it("is not asked of an adult, who is not being collected", () => {
+      expect(
+        releaseBlock({ ...base, kind: "adult", expected: null, typed: "", allowed: ["mum"] }),
+      ).toBeNull();
+    });
+
+    it("does not let an override of another kind stand in for it", () => {
+      for (const kind of ["code", "pickup", "restriction"] as const) {
+        expect(
+          releaseBlock({ ...base, allowed: ["mum"], override: { kind } }),
+          kind,
+        ).toBe("unnamed");
+      }
+    });
+
+    it("still refuses a named person who is on neither list", () => {
+      expect(releaseBlock({ ...base, collectedBy: "stranger", allowed: ["mum"] })).toBe("pickup");
+    });
+
+    it("still refuses a named person a restriction names", () => {
+      expect(
+        releaseBlock({ ...base, collectedBy: "ex", restricted: ["ex"], allowed: ["ex"] }),
+      ).toBe("restriction");
+    });
+
+    it("lets a named person on the list through", () => {
+      expect(releaseBlock({ ...base, collectedBy: "mum", allowed: ["mum"] })).toBeNull();
+    });
   });
 
   it("refuses a child whose visit carries no code at all", () => {

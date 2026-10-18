@@ -10,7 +10,15 @@
  * server does, rather than a weaker one.
  */
 
-export type OverrideKind = "code" | "pickup" | "restriction";
+/**
+ * SEC-013. Why a release was stopped, which is also the decision a volunteer
+ * has to record to get past it.
+ *
+ * `unnamed` is the fourth. The three before it all describe a named person who
+ * failed a check; this one is nobody having been named at all, for a child
+ * whose records say who collects them.
+ */
+export type OverrideKind = "code" | "pickup" | "restriction" | "unnamed";
 
 export interface ReleaseQuestion {
   /**
@@ -42,6 +50,27 @@ export function releaseBlock(q: ReleaseQuestion): OverrideKind | null {
     if (!q.allowed.includes(q.collectedBy) && q.override?.kind !== "pickup") {
       return "pickup";
     }
+  } else if (q.kind !== "adult" && (q.restricted.length > 0 || q.allowed.length > 0)) {
+    /*
+     * SEC-013, R8.8, R8.9. Neither list can be applied to somebody who has not
+     * been named, so the answer is to name them.
+     *
+     * Both checks above sat inside `if (q.collectedBy)`, and the checkout
+     * dialog opens with nobody selected and offers "someone else", which maps
+     * to null. So the ordinary path through the screen released a child on the
+     * code alone: the authorised pickup list was never consulted, a do-not-
+     * contact order was never consulted, and because no override was involved
+     * no row was written and no reason was asked for. A person a court order
+     * names was released by that path provided they did not volunteer who they
+     * were.
+     *
+     * Only where the church has actually recorded something. A church that has
+     * filled in no pickup lists is not asked to justify every release, which
+     * is what made "someone else" the habit in the first place. Once a child
+     * has a list or a restriction, releasing them to an unnamed adult becomes
+     * a decision somebody records rather than a default.
+     */
+    if (q.override?.kind !== "unnamed") return "unnamed";
   }
 
   if (q.kind === "adult") return null;
