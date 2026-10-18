@@ -1118,6 +1118,7 @@ of money and after everything else.
 | HRT-413 | The platform says when Stripe has nowhere to report a gift | R13.2, R21.3 | Resolved |
 | HRT-414 | A refund made in Stripe's own dashboard never reaches the gift | R13.15, R13.9 | Resolved |
 | HRT-415 | The repeating gifts tile did not say the figure was a month | R13.3 | Resolved |
+| HRT-416 | demo.connectapp.church, the whole product on invented records | R19.7, R22.1 | Active |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |
@@ -4507,6 +4508,52 @@ dashboard refund actually raises.
 Five tests in `giving.test.ts` hold it: a refund the product never issued, four deliveries of one
 refund leaving the total at one refund, a second refund followed by one the bank refused, a figure
 larger than the gift, and another church's account.
+
+### HRT-416, the demo becomes a place rather than a button
+
+Asked for on 17 October 2026, to replace the way demo works today: its own address, the whole
+product rather than a gated corner of it, and fast to open from either environment.
+
+**What already existed.** The per-visitor model was already built under HRT-282: `createDemoChurch`
+hands each visitor a church of their own from a pool built in advance, claimed on arrival, carrying
+a signed cookie instead of an account, and swept after 24 hours. Writes are the visitor's alone and
+go when the church does. Everybody starts from the same seeded church, which is the "shared" half of
+what was asked for.
+
+**What was missing: approval.** `buildDemoChurch` created a tenant and never set `approved_at`, so
+every demo church was provisional. That is the gate on a church nobody has looked at yet, and it is
+right for a stranger's sign-up: twenty-five members, no join link, no invitations. A visitor sent to
+see the product met the restrictions instead. Demo churches are approved on creation now. It opens
+nothing that could reach a person: a demo church has no messaging credentials and no Stripe account,
+so an invitation sends nowhere and a gift cannot be taken.
+
+**The number that decides the rest.** Building one demo church takes **37.8 seconds**, measured on
+17 October against the development database, for a church holding **872 rows across 27 tables**.
+That is 43ms a row, because the loader inserts one at a time through the repo layer with audit
+triggers firing on each. Which is the right way to build it: the demo uses the same functions the
+product uses, so it cannot drift into showing something the product does not do.
+
+It is the wrong way to answer a visitor. The pool holds two, so two people arriving together drain
+it and the third waits 38 seconds at a blank page, and a seed rich enough to show giving, messaging,
+follow-ups, forms, events and a website would take minutes rather than seconds.
+
+**So the two are separated.** The loader builds a template church once, offline. A visitor gets a
+copy made with SQL, which for 872 rows is a handful of statements and milliseconds. The seed can
+then grow as rich as the product is without a visitor ever waiting for it.
+
+The risk is a clone that quietly misses a table, which would show a visitor a church with no groups
+and no sign that anything was wrong. The table list is derived from the schema, every table carrying
+a `tenant_id` and there are 99 of them, rather than written out by hand, and a test clones a church
+and compares row counts table by table so a table added later cannot be forgotten.
+
+**Decided with the user, 17 October.** Open with no sign-in. One seeded church that everybody starts
+from, with each visitor's writes their own and cleared when their copy is swept. Deployed from
+`production`, so a church sent there sees what churches are actually running.
+
+**Still to do:** the clone, the host and its automatic start, the full seed, the deploy from
+`production`, and retiring the in-product demo. The tests in `demo-church.test.ts` were skipped under
+HRT-282 waiting for this rework and come back with the clone, when building a church in a test stops
+costing 38 seconds.
 
 ### HRT-415, a monthly figure that did not say so
 

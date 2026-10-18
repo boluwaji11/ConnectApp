@@ -51,11 +51,26 @@ async function buildDemoChurch(): Promise<{ tenantId: string; slug: string }> {
   const slug = `demo-${suffix()}`;
   const sql = owner();
 
+  /*
+   * R1.1, R19.7. A demo church is approved from the moment it exists.
+   *
+   * Approval is the gate on a church nobody has looked at yet: twenty-five
+   * members, no join link, no invitations. Every one of those is right for a
+   * stranger's sign-up and wrong for a demo, which is a church we built
+   * ourselves out of invented people so that somebody can see what the product
+   * does. A visitor who met the cap, or pressed Invite and was refused, was
+   * being shown a restriction rather than the product.
+   *
+   * Approving it opens nothing that could reach a real person: the church has
+   * no messaging credentials and no Stripe account, so an invitation sends
+   * nowhere and a gift cannot be taken.
+   */
   const [tenant] = await sql<{ id: string }[]>`
-    insert into tenants (slug, name, timezone, demo_expires_at)
+    insert into tenants (slug, name, timezone, demo_expires_at, approved_at, approved_by)
     values (
       ${slug}, ${DEMO_NAME}, 'America/Chicago',
-      ${new Date(Date.now() + POOL_LIFETIME_HOURS * 60 * 60 * 1000)}
+      ${new Date(Date.now() + POOL_LIFETIME_HOURS * 60 * 60 * 1000)},
+      now(), 'demo'
     )
     returning id`;
 

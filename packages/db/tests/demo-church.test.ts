@@ -15,6 +15,7 @@ import {
 import { DEMO_PEOPLE } from "../src/demo/members";
 import { listPeople } from "../src/repo/members";
 import { withAuditTriggersOff } from "../src/maintenance";
+import { churchStanding } from "../src/repo/provisional";
 
 const made: string[] = [];
 
@@ -24,6 +25,47 @@ afterAll(async () => {
     await sql`delete from app_users where email like '%@demo.invalid'`;
   });
   await closeConnections();
+});
+
+/**
+ * HRT-416. A demo is a church somebody is allowed to use.
+ *
+ * Approval is the gate on a church nobody has looked at yet: twenty-five
+ * members, no join link, no invitations. A demo church was built without it,
+ * so a visitor sent to look at the product met the restrictions meant for a
+ * stranger's sign-up instead.
+ *
+ * Not skipped, unlike the rest of this file: the gate it checks is the one
+ * that protects every real church, so it runs even while the demo is being
+ * reworked around it.
+ */
+describe("a demo church's standing", () => {
+  it("is approved, so none of the provisional limits apply", async () => {
+    /* Anything already waiting was built by whatever code was here before, so
+       the pool is emptied and one is built against the code under test. */
+    await withAuditTriggersOff(async (sql) => {
+      await sql`delete from tenants
+                 where demo_expires_at is not null and demo_claimed_at is null`;
+    });
+    await topUpDemoPool(1);
+    const [waiting] = await owner()<{ id: string; approved_at: Date | null }[]>`
+      select id, approved_at from tenants
+       where demo_expires_at is not null and demo_claimed_at is null
+       order by created_at desc limit 1`;
+
+    expect(waiting, "the pool built nothing to check").toBeTruthy();
+    made.push(waiting!.id);
+    expect(waiting!.approved_at).toBeInstanceOf(Date);
+
+    const standing = await withTenant(
+      { tenantId: waiting!.id, role: "owner" },
+      (db) => churchStanding(db, waiting!.id),
+    );
+    expect(standing.approved).toBe(true);
+    /* Null remaining is what an approved church reports: nothing left to use
+       up, because there is no cap on it. */
+    expect(standing.remaining).toBeNull();
+  }, 300_000);
 });
 
 /**
