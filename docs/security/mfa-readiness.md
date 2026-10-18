@@ -236,3 +236,36 @@ what a session may then reach, which is still decided per request.
 
 No church is running on the platform yet, which makes this the cheapest it will
 ever be to require.
+
+## Required at sign-up (HRT-438, 18 October 2026)
+
+Who: anybody holding one of `TWO_STEP_PERMISSIONS` in
+`packages/db/src/roles.ts`. That is the people, children, money and
+church-settings permissions, plus leading a group or a team. It catches owner,
+admin, staff, finance, pastoral, checkin_volunteer, group_leader and
+team_leader, and any role a church wrote that holds one of them.
+
+A plain member is never asked. Their role holds nothing, and `/members`,
+`/checkin` and `/reports` all refuse them, which was checked in a browser
+rather than assumed.
+
+When: accounts made on or after `TWO_STEP_REQUIRED_FROM` in
+`packages/db/src/repo/two-step.ts`. Widening the rule to everybody is moving
+that date back; narrowing it is moving it forward.
+
+Where: `requireSession`, after the church is settled, because the answer
+depends on the role in this church rather than on the account.
+
+**Two things to know if this is ever debugged.** Both cost an hour.
+
+The gate appeared not to fire on page navigations while firing correctly on
+API routes. It was the dev server: Turbopack could not resolve
+`@vercel/turbopack-next/internal/font/google/font`, page renders were failing
+and falling back to the client, and nothing server-side ran. Against a build
+it worked first time. A gate that seems to work on one kind of request and
+not another is worth suspecting the server before the code.
+
+Finishing enrolment re-renders the page the action was called from, so a
+`redirect()` on that page fires the instant the code is accepted and the
+recovery codes are never shown. Both the product's screen and the portal's had
+that bug. Neither sends anybody away once enrolled.
