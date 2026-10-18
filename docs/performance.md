@@ -270,3 +270,37 @@ doing its job and it wants fixing before it ships.
 - The dev server log still prints `GET /x 200 in NNNms` for every request. A
   repeat visit to a staff page should now be a few hundred milliseconds rather
   than one to two and a half seconds.
+
+## Signing out, 18 October 2026
+
+HRT-437. Measured because it felt slow, and the feeling was real on a laptop
+running `next dev` and not real anywhere else.
+
+Driven through Playwright: sign in, open the confirm, and time from the press
+of the confirm to the next page being painted.
+
+| | `next dev` | production build |
+|---|---|---|
+| `POST /auth/sign-out` | 444ms | **88ms** |
+| The page it lands on | 330ms | **23ms** |
+| Press to painted | 1050ms | **516ms** |
+
+The route does one thing that costs anything, which is asking Supabase to
+revoke the session. That is a round trip and it is not optional: `signOut()`
+defaults to revoking everywhere, so a refresh token that has been copied off
+the machine stops working. Dropping to a local sign-out would take the round
+trip away and leave that token valid until it expired, which is not a trade
+worth 88ms.
+
+The rest of the dev number is the compiler, and the destination is the
+marketing page, which is the heaviest page in the product under `next dev` and
+one of the lightest served from a build.
+
+**Nothing was changed.** The number against a build is already where it should
+be, and the button has said "Signing out" with a spinner throughout.
+
+**A measuring note worth keeping.** The first run of this put the figure at
+**31 seconds**, which was the test waiting thirty seconds for a selector inside
+a dialog it had not opened, then falling through to a catch that opened it. The
+request log showed the POST firing at the very end. A number that surprising is
+usually the harness.
