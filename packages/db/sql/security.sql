@@ -68,6 +68,7 @@ alter default privileges in schema public grant select, insert, update, delete o
  */
 do $$
 declare t text;
+declare p record;
 begin
   for t in
     select c.relname
@@ -77,6 +78,20 @@ begin
   loop
     execute format('revoke all on public.%I from hearth_app', t);
     execute format('alter table public.%I enable row level security', t);
+  end loop;
+
+  /*
+   * Exempting these from the policy loop below stops a new policy being
+   * written. It does not take away one written before the exemption existed,
+   * and a database that has run an older copy of this file is carrying one.
+   * A fresh database never had it, so the test that asserts this passes in CI
+   * either way and the development database failed on the first run.
+   */
+  for p in
+    select tablename, policyname from pg_policies
+     where schemaname = 'public' and tablename like 'platform\_%'
+  loop
+    execute format('drop policy %I on public.%I', p.policyname, p.tablename);
   end loop;
 end $$;
 
