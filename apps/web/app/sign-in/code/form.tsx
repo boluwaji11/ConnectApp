@@ -1,12 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Fingerprint } from "lucide-react";
 import { Banner, Button, Field, Input } from "@connectapp/ui";
 import { t } from "@connectapp/i18n";
 import { submitCode, submitRecovery } from "./actions";
 import { useFormError } from "@/lib/form-error";
-import { presentPasskey, type RelyingParty } from "@/lib/passkey-client";
 
 /**
  * R1.8. The second step of signing in.
@@ -21,12 +19,9 @@ import { presentPasskey, type RelyingParty } from "@/lib/passkey-client";
 export function CodeForm({
   next,
   gone,
-  passkey,
 }: {
   next?: string;
   gone?: boolean;
-  /** The passkey this person holds, where one is offered on this name. */
-  passkey?: { factorId: string; party: RelyingParty } | null;
 }) {
   /* R1.8. Supabase holds no factor to present, so the recovery code is the
      only way through and the screen opens on it rather than on a box nothing
@@ -46,22 +41,6 @@ export function CodeForm({
     });
   };
 
-  /*
-   * R1.8. The passkey ceremony runs in the browser, and the browser client
-   * writes the same cookies the server reads, so the session this raises to
-   * aal2 is the one the next request resolves. A full load rather than a
-   * router refresh, because the gate that sent them here is read on the
-   * server.
-   */
-  const withPasskey = () => {
-    if (!passkey) return;
-    startTransition(async () => {
-      setError(undefined);
-      const done = await presentPasskey(passkey.factorId, passkey.party);
-      if (done.error) return setError(t(done.error));
-      window.location.assign(next || "/");
-    });
-  };
 
   const swap = () => {
     setError(undefined);
@@ -106,18 +85,6 @@ export function CodeForm({
       <Button type="submit" full loading={pending} disabled={pending || !ready}>
         {t("twoStep.confirm")}
       </Button>
-
-      {passkey && !recovery ? (
-        <Button
-          type="button"
-          variant="secondary"
-          full
-          onClick={withPasskey}
-          disabled={pending}
-        >
-          <Fingerprint /> {t("twoStep.signInPasskey")}
-        </Button>
-      ) : null}
 
       {gone ? null : (
       <button

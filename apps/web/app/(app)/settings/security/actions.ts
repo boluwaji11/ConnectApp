@@ -7,10 +7,8 @@ import { safeOrigin } from "@/lib/safe-redirect";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseServer } from "@/lib/supabase/server";
 import { explainAuth } from "@/lib/auth-errors";
-import {
-  beginEnrolment, finishEnrolment, turnOffEverything, presentableFactor,
-} from "@/lib/two-step";
-import { issueRecoveryCodes, markTwoStepOn } from "@connectapp/db";
+import { beginEnrolment, finishEnrolment, turnOffEverything } from "@/lib/two-step";
+import { issueRecoveryCodes } from "@connectapp/db";
 
 export interface PasswordResult {
   error?: string;
@@ -167,24 +165,3 @@ export async function newRecoveryCodes(data: FormData): Promise<
   return { codes: await issueRecoveryCodes(session.userId) };
 }
 
-/**
- * R1.8. A passkey has just been registered in the browser, so finish up.
- *
- * The ceremony itself cannot happen here: the private key never leaves the
- * device and `navigator.credentials` is a browser API. What the server still
- * owns is the mirror and the recovery codes, and both are written only after
- * Supabase says a verified factor exists, which is read from Supabase rather
- * than taken from the browser's word for it.
- */
-export async function completePasskey(): Promise<
-  { codes: string[] } | { error: string }
-> {
-  const session = await requireSession();
-
-  const held = await presentableFactor();
-  if (held === "unknown") return { error: t("twoStep.error.again") };
-  if (!held) return { error: t("twoStep.error.code") };
-
-  await markTwoStepOn(session.userId);
-  return { codes: await issueRecoveryCodes(session.userId) };
-}

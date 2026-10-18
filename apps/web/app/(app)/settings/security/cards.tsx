@@ -3,7 +3,6 @@
 import * as React from "react";
 import { Security } from "./security";
 import { TwoStep } from "./two-step";
-import type { RelyingParty } from "@/lib/passkey-client";
 
 /**
  * R24.6. The three cards, as one accordion.
@@ -17,14 +16,10 @@ export function SecurityCards({
   email,
   enrolled,
   codesLeft,
-  passkey,
-  passkeyHeld,
 }: {
   email: string;
   enrolled: boolean;
   codesLeft: number;
-  passkey: RelyingParty | null;
-  passkeyHeld: boolean;
 }) {
   const [open, setOpen] = React.useState<"email" | "password" | "twoStep" | null>(null);
 
@@ -38,8 +33,6 @@ export function SecurityCards({
       <TwoStep
         enrolled={enrolled}
         codesLeft={codesLeft}
-        passkey={passkey}
-        passkeyHeld={passkeyHeld}
         open={open === "twoStep"}
         onOpen={(to) => setOpen(to ? "twoStep" : null)}
       />

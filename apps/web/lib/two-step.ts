@@ -24,7 +24,16 @@ import { supabaseServer } from "./supabase/server";
 /** A factor Supabase holds for this person. */
 export interface Factor {
   id: string;
-  /** An authenticator app, or a passkey held by the device. */
+  /**
+   * An authenticator app, or a key held by a device.
+   *
+   * Nothing offers the second any more: passkeys were built here and taken
+   * out, because a key is bound to a registrable domain and Supabase allows
+   * at most five ceremony origins with no wildcard, so the offer could never
+   * reach a church on its own name. The kind stays because an account that
+   * enrolled one while it was offered still holds it, and a factor this file
+   * cannot see is a factor nobody can turn off.
+   */
   kind: "totp" | "webauthn";
   /** Only a verified factor is ever challenged. An abandoned enrolment is not. */
   verified: boolean;
@@ -78,14 +87,13 @@ export const factors = cache(async (): Promise<{ held: Factor[] | null }> => {
 
 /** The verified factors, by kind, for a screen deciding what to offer. */
 export async function presentable(): Promise<
-  { known: true; totp: string | null; passkey: string | null } | { known: false }
+  { known: true; totp: string | null } | { known: false }
 > {
   const { held } = await factors();
   if (held === null) return { known: false };
   return {
     known: true,
     totp: held.find((o) => o.verified && o.kind === "totp")?.id ?? null,
-    passkey: held.find((o) => o.verified && o.kind === "webauthn")?.id ?? null,
   };
 }
 

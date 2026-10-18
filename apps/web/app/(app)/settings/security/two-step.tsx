@@ -2,16 +2,15 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Download, Fingerprint, ShieldCheck } from "lucide-react";
+import { Check, Copy, Download, ShieldCheck } from "lucide-react";
 import {
   Banner, Button, Checkbox, Dialog, DialogContent, DialogFooter, Field, Input,
 } from "@connectapp/ui";
 import { t, plural } from "@connectapp/i18n";
 import { SettingCard } from "../card";
 import {
-  startTwoStep, confirmTwoStep, stopTwoStep, newRecoveryCodes, completePasskey,
+  startTwoStep, confirmTwoStep, stopTwoStep, newRecoveryCodes,
 } from "./actions";
-import { registerPasskey, type RelyingParty } from "@/lib/passkey-client";
 import { useFormError } from "@/lib/form-error";
 
 /**
@@ -23,10 +22,12 @@ import { useFormError } from "@/lib/form-error";
  * unverified factor behind. The card itself stays a card: a status, a
  * sentence, and a button.
  *
- * Two ways to do it. An authenticator app works anywhere and is the one most
- * people will use. A passkey is the device itself, which is stronger and needs
- * nothing installed, and is offered only where the key can be bound to one of
- * our own names. See lib/passkey.ts for why that condition exists.
+ * An authenticator app, and nothing else. Passkeys were built here and taken
+ * out again: a key is bound to a registrable domain, and Supabase allows at
+ * most five ceremony origins with no wildcard, so the offer could never reach
+ * a church on its own name or past the fifth church on ours. An option that
+ * works for the platform's own staff and for nobody else is worse than no
+ * option, because it is one more thing on the screen to read and rule out.
  */
 type Stage =
   | { at: "shut" }
@@ -146,8 +147,6 @@ function Codes({
 export function TwoStep({
   enrolled,
   codesLeft,
-  passkey,
-  passkeyHeld: heldAtFirst,
   open,
   onOpen,
 }: {
@@ -156,10 +155,6 @@ export function TwoStep({
   /** Decided above, so opening this shuts whichever card was open. */
   open: boolean;
   onOpen: (to: boolean) => void;
-  /** Null where a passkey cannot be bound to one of our own names. */
-  passkey: RelyingParty | null;
-  /** Whether what is protecting this account is a passkey rather than an app. */
-  passkeyHeld?: boolean;
 }) {
   const router = useRouter();
   const [stage, setStage] = React.useState<Stage>({ at: "shut" });
@@ -185,7 +180,6 @@ export function TwoStep({
   const [refused, setRefused] = React.useState(0);
   /* Which kind is protecting the account, redrawn without a reload when
      this screen is the one that set it up. */
-  const [passkeyHeld, setPasskeyHeld] = React.useState(Boolean(heldAtFirst));
 
   const shut = () => {
     setStage({ at: "shut" });
@@ -205,33 +199,6 @@ export function TwoStep({
     });
   };
 
-  /*
-   * R1.8. The passkey ceremony runs in the browser and cannot run anywhere
-   * else: the private key never leaves the device. The server is asked
-   * afterwards, and it reads the factor from Supabase rather than believing
-   * what the browser says happened.
-   */
-  const usePasskey = () => {
-    if (!passkey) return;
-    startTransition(async () => {
-      setCardError(undefined);
-      const made = await registerPasskey(passkey);
-      if (made.error) return setCardError(t(made.error));
-
-      const done = await completePasskey();
-      if ("error" in done) return setCardError(done.error);
-      setIsOn(true);
-      setPasskeyHeld(true);
-      setLeft(done.codes.length);
-      /* R24.6. The overview rail is a server component and holds the same
-         answer. Without this the card said On and the rail still said Not
-         enabled until the screen was loaded again. */
-      router.refresh();
-      setSaid(false);
-      setStage({ at: "codes", codes: done.codes });
-    });
-  };
-
   const confirm = () => {
     if (stage.at !== "code") return;
     const factorId = stage.factorId;
@@ -243,7 +210,6 @@ export function TwoStep({
         return setError(done.error);
       }
       setIsOn(true);
-      setPasskeyHeld(false);
       setLeft(done.codes.length);
       router.refresh();
       setCode("");
@@ -258,7 +224,6 @@ export function TwoStep({
       const result = await stopTwoStep(data);
       if (result.error) return setError(result.error);
       setIsOn(false);
-      setPasskeyHeld(false);
       setLeft(0);
       router.refresh();
       shut();
@@ -295,7 +260,7 @@ export function TwoStep({
            card's own line says what is protecting the account and no more. */
         lede={
           isOn
-            ? (passkeyHeld ? t("twoStep.summaryPasskey") : t("twoStep.summaryApp"))
+            ? t("twoStep.summaryApp")
             : t("twoStep.off")
         }
         action={
@@ -325,16 +290,6 @@ export function TwoStep({
                   <Button type="button" onClick={begin} loading={pending} disabled={pending}>
                     {t("twoStep.turnOn")}
                   </Button>
-                  {passkey ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={usePasskey}
-                      disabled={pending}
-                    >
-                      <Fingerprint /> {t("twoStep.usePasskey")}
-                    </Button>
-                  ) : null}
                 </div>
               </div>
             ) : (
@@ -349,10 +304,10 @@ export function TwoStep({
               <div className="flex flex-col gap-6">
                 <section className="flex flex-col gap-2">
                   <h3 className="text-[15px] font-bold text-fg">
-                    {passkeyHeld ? t("twoStep.passkeyTitle") : t("twoStep.appTitle")}
+                    {t("twoStep.appTitle")}
                   </h3>
                   <p className="text-[13px] text-fg-muted">
-                    {passkeyHeld ? t("twoStep.passkeyLede") : t("twoStep.appLede")}
+                    {t("twoStep.appLede")}
                   </p>
                   <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-success-soft px-2.5 py-0.5 text-[13px] font-semibold text-success-text">
                     <Check aria-hidden className="size-3.5" />

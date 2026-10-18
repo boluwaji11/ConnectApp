@@ -1,7 +1,5 @@
 import { requireSession } from "@/lib/session";
 import { twoStepFor } from "@connectapp/db";
-import { relyingParty } from "@/lib/passkey";
-import { presentable } from "@/lib/two-step";
 import { SecurityOverview } from "./overview";
 import { SecurityCards } from "./cards";
 import { t } from "@connectapp/i18n";
@@ -24,11 +22,7 @@ export default async function SecurityPage() {
   const session = await requireSession();
   /* R1.8. The mirror, not Supabase: this screen draws the state, it does not
      act on a factor until somebody presses something. */
-  const [twoStep, passkey, held] = await Promise.all([
-    twoStepFor(session.userId),
-    relyingParty(),
-    presentable(),
-  ]);
+  const twoStep = await twoStepFor(session.userId);
 
   return (
     /*
@@ -64,8 +58,6 @@ export default async function SecurityPage() {
           email={session.email}
           enrolled={twoStep.enrolledAt !== null}
           codesLeft={twoStep.codesLeft}
-          passkey={passkey}
-          passkeyHeld={held.known && held.passkey !== null && held.totp === null}
         />
       </div>
       </div>

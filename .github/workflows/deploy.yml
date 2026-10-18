@@ -1,0 +1,116 @@
+name: Deploy
+
+# HRT-450. Pushing to production is the whole of deploying.
+#
+# What used to happen: the push moved the branch, Vercel noticed and built the
+# code, and the database was left exactly as it was. Nothing applied a
+# migration, so new code met an old schema and the only thing standing between
+# a church and that was somebody remembering to run a script first.
+#
+# What happens now, in this order and no other:
+#
+#   1. the checks run, the same ones that guard main
+#   2. the migrations are applied to the production database
+#   3. the two sites are built and deployed
+#
+# Step 3 waits for step 2, which is the point. Vercel's own git deployment is
+# turned off for this branch in vercel.json, so this workflow is the only way
+# production moves and the ordering cannot be raced.
+#
+# If a migration fails, nothing is deployed and production keeps serving the
+# code it already had against the schema it already had, which is the pair
+# that was working a minute ago.
+
+on:
+  push:
+    branches: [production]
+  # Deployable by hand as well, for the case where a deploy failed on
+  # something outside the repository and nothing in the repository changed.
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  # The gate. Everything below waits for this, so a deployment cannot be the
+  # thing that discovers a type error.
+  checks:
+    name: Checks
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  migrate:
+    name: Database
+    needs: checks
+    runs-on: ubuntu-latest
+    # One at a time, whatever else is happening, because two migrators against
+    # one database is how a schema ends up half applied.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Said plainly rather than failing twenty lines later on a missing
+      # connection string that reads like a bug in the migrator.
+      - name: The credentials are set
+        run: |
+          missing=""
+          [ -n "${{ secrets.PRODUCTION_DATABASE_URL }}" ] || missing="$missing PRODUCTION_DATABASE_URL"
+          [ -n "${{ secrets.PRODUCTION_APP_PASSWORD }}" ] || missing="$missing PRODUCTION_APP_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "Missing repository secret(s):$missing"
+            echo "Set them with: node scripts/deploy-secrets.mjs"
+            exit 1
+          fi
+
+      - name: What this will apply
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: pnpm --filter @connectapp/db run pending
+
+      - name: Apply it
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          CONNECTAPP_APP_PASSWORD: ${{ secrets.PRODUCTION_APP_PASSWORD }}
+        run: pnpm --filter @connectapp/db run migrate
+
+  sites:
+    name: Deploy
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: production
+    strategy:
+      # Both sites go, and one failing does not cancel the other: a church
+      # left on an old admin portal is better than a church left half moved.
+      fail-fast: false
+      matrix:
+        include:
+          - app: web
+            project: ${{ vars.VERCEL_PROJECT_ID_WEB }}
+          - app: admin
+            project: ${{ vars.VERCEL_PROJECT_ID_ADMIN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy ${{ matrix.app }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ matrix.project }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "Missing VERCEL_TOKEN, VERCEL_ORG_ID or the project id."
+            echo "Set them with: node scripts/deploy-secrets.mjs"
+            exit 1
+          fi
+          npx --yes vercel@48 pull --yes --environment=production --token="$VERCEL_TOKEN"
+          npx --yes vercel@48 build --prod --token="$VERCEL_TOKEN"
+          npx --yes vercel@48 deploy --prebuilt --prod --token="$VERCEL_TOKEN"

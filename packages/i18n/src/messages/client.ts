@@ -5,7 +5,7 @@
  * marked "use client" actually name. Run `pnpm catalogue` after changing a
  * screen's words; CI fails if this file is stale.
  *
- * 3990 of 5664 keys.
+ * 3983 of 5656 keys.
  */
 import type { Catalogue } from "../core";
 
@@ -474,10 +474,7 @@ export const browserWords: Catalogue = {
   "twoStep.appTitle": "Authenticator app",
   "twoStep.appLede": "Your account is protected by an additional verification code.",
   "twoStep.connected": "Connected",
-  "twoStep.passkeyTitle": "Passkey",
-  "twoStep.passkeyLede": "This device signs you in with a fingerprint, a face, or a screen lock.",
   "twoStep.summaryApp": "Authenticator app connected",
-  "twoStep.summaryPasskey": "Passkey connected",
   "twoStep.codesUse": "Use a recovery code to sign in if you lose access to your authenticator app.",
   "twoStep.unused.one": "{count} unused code",
   "twoStep.unused.other": "{count} unused codes",
@@ -493,10 +490,6 @@ export const browserWords: Catalogue = {
   "twoStep.appMicrosoft": "Microsoft Authenticator",
   "twoStep.appsTail": "and other compatible apps.",
   "twoStep.required.continue": "Continue",
-  "twoStep.usePasskey": "Use a passkey",
-  "twoStep.signInPasskey": "Use your passkey",
-  "twoStep.error.passkey": "Couldn't set up a passkey on this device. Try an authenticator app instead.",
-  "twoStep.error.passkeyGone": "That passkey didn't work. Try again, or use a recovery code.",
   "twoStep.manual": "Enter code manually instead",
   "twoStep.manualHide": "Scan the QR code instead",
   "twoStep.secret": "Setup key",
