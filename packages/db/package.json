@@ -26,7 +26,8 @@
     "seed:staff": "tsx scripts/seed-staff.ts",
     "seed:notifications": "tsx scripts/seed-notifications.ts",
     "seed:report": "tsx scripts/seed-report.ts",
-    "demo:template": "tsx scripts/demo-template.ts"
+    "demo:template": "tsx scripts/demo-template.ts",
+    "reset:two-step": "tsx scripts/reset-two-step.mts"
   },
   "dependencies": {
     "@connectapp/env": "workspace:*",
