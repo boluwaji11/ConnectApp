@@ -3,6 +3,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { clearDemoPass } from "@/lib/demo-pass";
 import { forgetChurch } from "@/lib/church-choice";
 import { DEV_PASS } from "@/lib/dev-gate";
+import { isDemoHost, productSite } from "@/lib/demo-host";
 import { cookies } from "next/headers";
 
 export async function POST(request: NextRequest) {
@@ -21,5 +22,24 @@ export async function POST(request: NextRequest) {
    * lands on the marketing page rather than the door.
    */
   (await cookies()).delete(DEV_PASS);
-  return NextResponse.redirect(`${new URL(request.url).origin}/`);
+
+  /*
+   * HRT-416. Leaving the demo leaves its address.
+   *
+   * Signing out on `demo.connectapp.church` sent them to the root of that
+   * host, where the middleware hands anybody without a pass a fresh demo
+   * church: a sign-out that signs you straight back in. They go to the
+   * product's own site instead, which is what somebody who has finished
+   * looking around wants to see.
+   */
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  const away = isDemoHost(host) ? productSite(host) : `${new URL(request.url).origin}/`;
+
+  /*
+   * 303, not the 307 this used to send. A 307 keeps the method, so the
+   * browser posted the sign-out form again at wherever it was sent. On the
+   * demo that landed on a route with no POST handler and the visitor met
+   * HTTP 405 rather than a signed-out screen.
+   */
+  return NextResponse.redirect(away, 303);
 }

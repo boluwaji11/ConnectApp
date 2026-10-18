@@ -1,9 +1,8 @@
 import { Banner, Button } from "@connectapp/ui";
 import type { demoChurchInfo } from "@connectapp/db";
 import { t } from "@connectapp/i18n";
-
-/** Where the product itself answers, which is not where the demo does. */
-const PLATFORM_HOST = process.env["PLATFORM_HOST"] || "connectapp.church";
+import { headers } from "next/headers";
+import { productSite } from "@/lib/demo-host";
 
 /**
  * R19.7. Says, on every page of a demo, that it is one.
@@ -13,12 +12,15 @@ const PLATFORM_HOST = process.env["PLATFORM_HOST"] || "connectapp.church";
  * whole reason the demo is a separate church is that nobody can mistake it for
  * their own, and saying so is the cheap half of that.
  */
-export function DemoBanner({
+export async function DemoBanner({
   info,
 }: {
   info: Awaited<ReturnType<typeof demoChurchInfo>>;
 }) {
   if (!info.isDemo || !info.expiresAt) return null;
+
+  const asked = await headers();
+  const site = productSite(asked.get("x-forwarded-host") ?? asked.get("host"));
 
   return (
     <Banner tone="warning" title={t("demo.banner.title")} className="rounded-none border-x-0 border-t-0">
@@ -28,7 +30,7 @@ export function DemoBanner({
             behind it: pressing this went to a sign-in screen on
             demo.connectapp.church, which is a dead end. */}
         <Button asChild variant="secondary">
-          <a href={`https://${PLATFORM_HOST}/create-church`}>{t("demo.banner.signUp")}</a>
+          <a href={`${site}create-church`}>{t("demo.banner.signUp")}</a>
         </Button>
       </div>
     </Banner>

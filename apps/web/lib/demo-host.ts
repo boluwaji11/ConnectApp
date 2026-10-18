@@ -50,3 +50,19 @@ export function backTo(headers: Headers, path: string): URL {
   const { host, proto } = cameFrom(headers);
   return new URL(path, `${proto}://${host}`);
 }
+
+/**
+ * The product's own site, worked out from the demo's address.
+ *
+ * `demo.connectapp.church` leads to `connectapp.church` and
+ * `demo.dev.connectapp.church` to `dev.connectapp.church`, so leaving the
+ * demo lands on whichever of the two the visitor came through without
+ * either one being written down anywhere.
+ */
+export function productSite(host: string | null | undefined): string {
+  const name = (host ?? DEMO_HOST).split(":")[0] ?? DEMO_HOST;
+  const port = (host ?? "").includes(":") ? `:${host!.split(":")[1]}` : "";
+  const bare = name.replace(/^demo\./i, "");
+  const proto = bare === "localhost" || bare.endsWith(".localhost") ? "http" : "https";
+  return `${proto}://${bare}${port}/`;
+}
