@@ -4,6 +4,7 @@ import { Badge, Banner, EmptyState, Table, Thead, Th, Tr, Td } from "@connectapp
 import { requireTeamMember } from "@/lib/admin";
 import { Screen, Block, Panel } from "@/components/screen";
 import { Since } from "@/components/since";
+import { LockedOut } from "./locked-out";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,12 @@ export default async function SecurityPage() {
             />
           </dl>
         </Panel>
+      </Block>
+
+      {/* HRT-441. The last resort for somebody who cannot get past their own
+          second factor, which has to exist before one is ever required. */}
+      <Block title="Locked out of two-step verification">
+        <LockedOut />
       </Block>
 
       <Block title="Attempts">

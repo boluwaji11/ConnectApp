@@ -247,3 +247,40 @@ export async function withdrawInvite(id: string): Promise<Done> {
     return { error: say(error) };
   }
 }
+
+/**
+ * R1.8, R21.4. Finding an account that cannot get past its own second factor.
+ *
+ * Looked up by the address somebody locked out can give over the phone. It
+ * answers the same way for an address with no account, so this is not a way
+ * to find out who holds one.
+ */
+export async function findTwoStep(
+  data: FormData,
+): Promise<Done & { found?: platform.TwoStepLookup | null }> {
+  const who = await requireTeamMember();
+  try {
+    const found = await platform.twoStepFor(who.id, String(data.get("email") ?? ""));
+    return { found };
+  } catch (error) {
+    return { error: say(error) };
+  }
+}
+
+/**
+ * R1.8, R21.4. Turning an account's second factor off, as the last resort.
+ *
+ * It lets nobody in. It puts the account back to a password and asks them to
+ * set two-step up again, and it writes a row naming the address and the
+ * reason into the log no application role can edit.
+ */
+export async function clearTwoStep(userId: string, reason: string): Promise<Done> {
+  const who = await requireTeamMember();
+  try {
+    await platform.clearTwoStep(who.id, userId, reason);
+    revalidatePath("/security");
+    return {};
+  } catch (error) {
+    return { error: say(error) };
+  }
+}

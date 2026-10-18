@@ -455,3 +455,106 @@ export async function claimInvite(
 
   return { name: invite.name };
 }
+
+/** R1.8, R21.4. What an operator is told about an account's second factor. */
+export interface TwoStepLookup {
+  userId: string;
+  email: string;
+  name: string | null;
+  /** Null for somebody who has not set it up. */
+  enrolledAt: Date | null;
+  /** Recovery codes still unspent. Zero with an enrolment is a locked door. */
+  codesLeft: number;
+  /** The churches this account belongs to, so the operator can see who it is. */
+  churches: string[];
+}
+
+/**
+ * R1.8, R21.4. Finding an account that cannot get past its own second factor.
+ *
+ * Looked up by the address they sign in with, because that is what somebody
+ * locked out can tell you over the phone. It answers for an address with no
+ * account too, with nothing set up, so this cannot be used to find out who
+ * holds an account here.
+ */
+export async function twoStepFor(by: string, email: string): Promise<TwoStepLookup | null> {
+  await requireAdmin(by);
+
+  const wanted = email.trim().toLowerCase();
+  if (!wanted) return null;
+
+  const rows = await owner()<{
+    user_id: string; email: string; name: string | null;
+    enrolled_at: Date | null; codes_left: string; churches: string[] | null;
+  }[]>`
+    select
+      u.id as user_id,
+      u.email,
+      u.full_name as name,
+      u.mfa_enrolled_at as enrolled_at,
+      (select count(*) from account_recovery_codes c
+        where c.user_id = u.id and c.used_at is null)::text as codes_left,
+      (select array_agg(t.name order by t.name)
+         from tenant_members m join tenants t on t.id = m.tenant_id
+        where m.user_id = u.id) as churches
+    from app_users u
+   where lower(u.email) = ${wanted}
+   limit 1`;
+
+  const found = rows[0];
+  if (!found) return null;
+
+  return {
+    userId: found.user_id,
+    email: found.email,
+    name: found.name,
+    enrolledAt: found.enrolled_at,
+    codesLeft: Number(found.codes_left),
+    churches: found.churches ?? [],
+  };
+}
+
+/**
+ * R1.8, R21.4. Taking an account's second factor off, as the last resort.
+ *
+ * A church's first owner has nobody above them. They hold the ten recovery
+ * codes they were given and nothing else, so an owner who loses the phone and
+ * the codes is outside their own church for good. This is the way back, and
+ * it is why it has to exist before a second factor is ever required.
+ *
+ * It is deliberately blunt: it does not let anybody in, it puts the account
+ * back to a password and asks them to set it up again. And it is written down
+ * in a log no application role can edit, with the address it was done to,
+ * because an operator who can switch off anybody's second factor is exactly
+ * the power that has to be reviewable.
+ */
+export async function clearTwoStep(
+  by: string,
+  userId: string,
+  reason: string,
+): Promise<{ email: string }> {
+  const actor = await requireAdmin(by);
+
+  const said = reason.trim();
+  if (said.length < 4) throw new PlatformError("Say why this is being turned off.");
+
+  const rows = await owner()<{ email: string; enrolled_at: Date | null }[]>`
+    select email, mfa_enrolled_at as enrolled_at from app_users where id = ${userId}`;
+  const held = rows[0];
+  if (!held) throw new PlatformError("There is no account with that id.");
+  if (!held.enrolled_at) throw new PlatformError("That account has no two-step verification on.");
+
+  /*
+   * The factor, the mirror and the codes together, the same way the person
+   * would have done it themselves. See markTwoStepOff for why the factor is
+   * deleted here rather than through Supabase.
+   */
+  await owner().begin(async (tx) => {
+    await tx`delete from auth.mfa_factors where user_id = ${userId}`;
+    await tx`update app_users set mfa_enrolled_at = null where id = ${userId}`;
+    await tx`delete from account_recovery_codes where user_id = ${userId}`;
+  });
+
+  await record(actor, "two-step cleared", { note: `${held.email}: ${said}` });
+  return { email: held.email };
+}
