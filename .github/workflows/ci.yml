@@ -57,6 +57,12 @@ jobs:
       - name: Strings are externalised (R22.8)
         run: pnpm --filter @connectapp/i18n test
 
+      # The pure boundaries in the web app that need no database: the markdown
+      # the editor stores becoming HTML, and the addresses an auth email may
+      # land on. Both are places where a missing character is a vulnerability.
+      - name: Web boundaries (R21.x)
+        run: pnpm --filter @connectapp/web test
+
       - name: Every shipped requirement has a story
         run: node scripts/check-backlog.mjs
 

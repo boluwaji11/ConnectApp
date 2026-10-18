@@ -121,3 +121,29 @@ export function cleanPortalName(value: string): string | null {
  */
 export const isReservedName = (name: string): boolean =>
   RESERVED.has(name.trim().toLowerCase());
+
+/**
+ * R1.1, R17.1. Whether a host is one of ours rather than a church's own.
+ *
+ * A custom domain is a name a church owns and points here. Our own names are
+ * not that, and a church must never be able to claim one: `resolveTenantByHost`
+ * answers the custom domain lookup for any host that is not a single label
+ * under the platform, so a church holding `connectapp.church` becomes the
+ * church every request on the front door resolves to, and every member of every
+ * other church is refused at the door. The same goes for the names the
+ * deployment itself answers on, which sit under the platform host but are
+ * reserved rather than a church's slug.
+ *
+ * Checked on the way in, where a church sets the name, and again on the way
+ * out, where a host is resolved, so a row written before this existed cannot
+ * take the platform down either.
+ */
+export function isPlatformHost(host: string, platform = platformHost()): boolean {
+  const bare = cleanDomain(host);
+  if (!bare) return false;
+  for (const root of [platform, "localhost"]) {
+    if (!root) continue;
+    if (bare === root || bare.endsWith(`.${root}`)) return true;
+  }
+  return false;
+}

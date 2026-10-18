@@ -115,13 +115,71 @@ export function htmlToMarkdown(root: Node): string {
   return out.join("").replace(/\n{4,}/g, "\n\n\n").replace(/\s+$/, "");
 }
 
+/**
+ * Text as it is safe to put anywhere in markup, including inside an attribute.
+ *
+ * The quotes matter as much as the angle brackets. Without them a stored link
+ * closed the `href` it was being written into and opened an attribute of its
+ * own: `[x](https://a"onmouseover="...)` became
+ * `<a href="https://a"onmouseover="...">`, which a browser parses as an event
+ * handler, and the three places this output is written (the composer's read
+ * back, the editor's own box, and outbound mail) all run it.
+ */
 const escape = (text: string) =>
-  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+/**
+ * The five replacements above, undone.
+ *
+ * The address has already been escaped by the time the link rule reaches it, so
+ * a legitimate `?a=1&b=2` arrives as `?a=1&amp;b=2`. It is read back here
+ * before being parsed as a URL and escaped again on the way out. `&amp;` is
+ * last, so a stored `&amp;lt;` cannot be unwound twice into a bracket.
+ */
+const unescape = (text: string): string =>
+  text
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&gt;/g, ">")
+    .replace(/&lt;/g, "<")
+    .replace(/&amp;/g, "&");
+
+/**
+ * A link's address, or nothing where it is not one we will write.
+ *
+ * Parsed rather than pattern matched, so the decision is made by the same
+ * reading of the address a browser would do, and only `http` and `https`
+ * survive it. A URL carrying credentials is refused as well: it renders as
+ * somebody else's name in the status bar.
+ */
+function linkHref(raw: string): string | null {
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    if (url.username || url.password) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
 
 /** Inline marks, as the few tags the editor works with. */
 function inlineHtml(text: string): string {
   let out = escape(text);
-  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
+  /*
+   * The address is read as a URL rather than matched against a pattern, and
+   * written back escaped. An address we will not write stays as the words
+   * somebody typed rather than becoming a tag with nothing behind it.
+   */
+  out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (whole, label: string, target: string) => {
+    const href = linkHref(unescape(target));
+    return href ? `<a href="${escape(href)}">${label}</a>` : whole;
+  });
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   out = out.replace(/\+\+([^+]+)\+\+/g, "<u>$1</u>");
   out = out.replace(/_([^_]+)_/g, "<em>$1</em>");
@@ -137,8 +195,11 @@ function inlineHtml(text: string): string {
 /**
  * Markdown as the HTML the editor opens with.
  *
- * Every angle bracket in the stored text is escaped before a tag is added, so
- * the only elements here are the ones this function writes.
+ * Every angle bracket and every quote in the stored text is escaped before a
+ * tag is added, so the only elements here are the ones this function writes and
+ * the only attributes are the ones it puts on them. The quotes are the half
+ * that was missing: escaping brackets alone left a stored link able to close
+ * its own `href` and add an event handler after it.
  */
 export function markdownToHtml(markdown: string): string {
   // A form posts its fields with CRLF line endings, so what comes back out of
