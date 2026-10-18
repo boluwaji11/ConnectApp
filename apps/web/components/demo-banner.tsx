@@ -1,7 +1,9 @@
-import Link from "next/link";
 import { Banner, Button } from "@connectapp/ui";
 import type { demoChurchInfo } from "@connectapp/db";
 import { t } from "@connectapp/i18n";
+
+/** Where the product itself answers, which is not where the demo does. */
+const PLATFORM_HOST = process.env["PLATFORM_HOST"] || "connectapp.church";
 
 /**
  * R19.7. Says, on every page of a demo, that it is one.
@@ -18,18 +20,15 @@ export function DemoBanner({
 }) {
   if (!info.isDemo || !info.expiresAt) return null;
 
-  /* "Monday at 1:22 AM". The day and the time, joined the way a person says
-     it, because "Monday 1:22 AM" reads as two facts rather than one moment. */
-  const day = info.expiresAt.toLocaleString(undefined, { weekday: "long" });
-  const time = info.expiresAt.toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
-  const when = `${day} at ${time}`;
-
   return (
     <Banner tone="warning" title={t("demo.banner.title")} className="rounded-none border-x-0 border-t-0">
       <div className="flex flex-wrap items-center gap-3">
-        <span>{t("demo.banner.body", { when })}</span>
+        <span>{t("demo.banner.body")}</span>
+        {/* Absolute, and off this host. The demo's own address has no sign-up
+            behind it: pressing this went to a sign-in screen on
+            demo.connectapp.church, which is a dead end. */}
         <Button asChild variant="secondary">
-          <Link href="/create-church">{t("demo.banner.signUp")}</Link>
+          <a href={`https://${PLATFORM_HOST}/create-church`}>{t("demo.banner.signUp")}</a>
         </Button>
       </div>
     </Banner>
