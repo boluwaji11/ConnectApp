@@ -171,6 +171,16 @@ export function TwoStep({
   const [left, setLeft] = React.useState(codesLeft);
   /* R1.8. Reset with every set, so a reissue is confirmed on its own. */
   const [said, setSaid] = React.useState(false);
+  /*
+   * R1.8. How many codes have been refused on this attempt.
+   *
+   * An authenticator keys its entry on the issuer and the address, so somebody
+   * who set two-step up before meets "you already have this account" when they
+   * scan again, keeps the old entry, and reads codes from a secret the server
+   * threw away. Every one of them is refused and the screen only says the code
+   * is wrong, which is true and no help at all.
+   */
+  const [refused, setRefused] = React.useState(0);
   /* Which kind is protecting the account, redrawn without a reload when
      this screen is the one that set it up. */
   const [passkeyHeld, setPasskeyHeld] = React.useState(Boolean(heldAtFirst));
@@ -180,6 +190,7 @@ export function TwoStep({
     setManual(false);
     setCode("");
     setSaid(false);
+    setRefused(0);
     setError(undefined);
   };
 
@@ -221,7 +232,10 @@ export function TwoStep({
     startTransition(async () => {
       setError(undefined);
       const done = await confirmTwoStep(factorId, code);
-      if ("error" in done) return setError(done.error);
+      if ("error" in done) {
+        setRefused((n) => n + 1);
+        return setError(done.error);
+      }
       setIsOn(true);
       setPasskeyHeld(false);
       setLeft(done.codes.length);
@@ -398,6 +412,12 @@ export function TwoStep({
         >
           <div className="flex flex-col gap-5" aria-busy={pending}>
             {error ? <Banner tone="danger">{error}</Banner> : null}
+
+            {/* Said once a code has actually been refused twice, so it is not
+                an explanation offered before anything has gone wrong. */}
+            {refused >= 2 && stage.at === "code" ? (
+              <Banner tone="info">{t("twoStep.staleHint")}</Banner>
+            ) : null}
 
             {stage.at === "scan" ? (
               <div className="flex flex-col items-center gap-4 text-center">

@@ -764,6 +764,7 @@ export const en = {
   "twoStep.password": "Your password",
   "twoStep.error.start": "Couldn't start setting this up. Try again.",
   "twoStep.error.code": "That code isn't right. Check your app and try again.",
+  "twoStep.staleHint": "If your authenticator app already lists ConnectApp for this address, that entry is an old one. Delete it, then scan this code again.",
   "twoStep.error.gone": "There is no authenticator set up on this account. Use a recovery code.",
   "twoStep.error.again": "Couldn't reach the verification service. Try again.",
   "twoStep.error.recovery": "That recovery code isn't right, or it has already been used.",

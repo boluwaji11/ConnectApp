@@ -5,7 +5,7 @@
  * marked "use client" actually name. Run `pnpm catalogue` after changing a
  * screen's words; CI fails if this file is stale.
  *
- * 3981 of 5647 keys.
+ * 3982 of 5648 keys.
  */
 import type { Catalogue } from "../core";
 
@@ -476,6 +476,8 @@ export const browserWords: Catalogue = {
   "twoStep.connected": "Connected",
   "twoStep.passkeyTitle": "Passkey",
   "twoStep.passkeyLede": "This device signs you in with a fingerprint, a face, or a screen lock.",
+  "twoStep.summaryApp": "Authenticator app connected",
+  "twoStep.summaryPasskey": "Passkey connected",
   "twoStep.codesUse": "Use a recovery code to sign in if you lose access to your authenticator app.",
   "twoStep.unused.one": "{count} unused code",
   "twoStep.unused.other": "{count} unused codes",
@@ -510,8 +512,6 @@ export const browserWords: Catalogue = {
   "twoStep.codesCopy": "Copy codes",
   "twoStep.codesDownload": "Download codes",
   "twoStep.codesKept": "Finish setup",
-  "twoStep.codesLeft.one": "{count} recovery code remaining",
-  "twoStep.codesLeft.other": "{count} recovery codes remaining",
   "twoStep.reissue": "Get new recovery codes",
   "twoStep.codesSection": "Recovery codes",
   "twoStep.codesInvalidate": "Generating a new set will invalidate your previous recovery codes.",
@@ -526,6 +526,7 @@ export const browserWords: Catalogue = {
   "twoStep.recoveryLede": "Enter one of the codes you saved when you set this up. It will be used up, and two-step verification will be turned off so you can set it up again.",
   "twoStep.offConfirm": "Turn off two-step verification?",
   "twoStep.offConfirmBody": "Your account will be protected by your password alone, and your recovery codes will stop working. You can set it up again at any time.",
+  "twoStep.staleHint": "If your authenticator app already lists ConnectApp for this address, that entry is an old one. Delete it, then scan this code again.",
   "settings.export.download": "Download",
   "place.title": "Where you meet",
   "place.campus": "Campus",
