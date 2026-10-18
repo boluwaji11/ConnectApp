@@ -97,8 +97,12 @@ async function buildDemoChurch(
  * different churches rather than queueing for the same one.
  */
 export async function createDemoChurch(userId: string): Promise<DemoChurch> {
-  await sweepExpiredDemos();
-
+  /*
+   * R19.7. No sweep here. It used to run on the way in, because the moment
+   * somebody asked for a demo was the only moment anything ran at all. The
+   * nightly rebuild sweeps now, and this is the one path that has to be fast:
+   * a visitor is waiting on it.
+   */
   const template = await ensureDemoTemplate();
   const expiresAt = new Date(Date.now() + DEMO_LIFETIME_HOURS * 60 * 60 * 1000);
   const slug = `demo-${suffix()}`;

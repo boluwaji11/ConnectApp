@@ -1118,7 +1118,7 @@ of money and after everything else.
 | HRT-413 | The platform says when Stripe has nowhere to report a gift | R13.2, R21.3 | Resolved |
 | HRT-414 | A refund made in Stripe's own dashboard never reaches the gift | R13.15, R13.9 | Resolved |
 | HRT-415 | The repeating gifts tile did not say the figure was a month | R13.3 | Resolved |
-| HRT-416 | demo.connectapp.church, the whole product on invented records | R19.7, R22.1 | Active |
+| HRT-416 | demo.connectapp.church, the whole product on invented records | R19.7, R22.1 | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |
@@ -4550,10 +4550,41 @@ and compares row counts table by table so a table added later cannot be forgotte
 from, with each visitor's writes their own and cleared when their copy is swept. Deployed from
 `production`, so a church sent there sees what churches are actually running.
 
-**Still to do:** the clone, the host and its automatic start, the full seed, the deploy from
-`production`, and retiring the in-product demo. The tests in `demo-church.test.ts` were skipped under
-HRT-282 waiting for this rework and come back with the clone, when building a church in a test stops
-costing 38 seconds.
+**What it took, in the end.**
+
+`cloneTenant` reads the tables, their columns and the keys between them from the catalogue on every
+run. 99 tables carry a `tenant_id`; a demo church fills 35 of them. Three are deliberately left
+behind: the audit log, which is append only and describes the loader rather than the visitor, the
+old loader's `demo_records`, and `tenant_members`, because the visitor is the only member a copy
+should have. `clone.test.ts` copies a church and compares row counts table by table, and fails if a
+scoped table is neither copied nor named as left behind, so a table added next year cannot be
+quietly missed.
+
+The first version took 11 seconds, which was not the 872 rows but the waiting: two hundred
+statements to a database that is not on the same machine. Asking which tables hold anything, mapping
+every id in one statement and sending all the inserts together brought it to 850ms locally and about
+a second on the deployment.
+
+**Three things the browser found that nothing else would have.** A redirect built from `nextUrl`
+lost the host the visitor typed, so the pass they had just been given was not sent and they met the
+sign-in screen. The seeded events were left as drafts, so the diary showed two tiles saying DRAFT.
+And the seed counted its dates in UTC while every screen reads the church's own timezone, so a
+template built after seven in the evening in Chicago gave the demo a service "today" that check-in
+read as tomorrow: a visitor met "Nothing on today" on a church whose whole point is a service
+running.
+
+**Live on 18 October.** `production` moved forward 19 commits, the wildcard already pointed at it,
+and the template was built through `/api/demo/refresh`. Measured on production: 0.38s for the
+redirect, 0.99s for the door, which is the copy and the pass, and 0.97s for the dashboard, so about
+four seconds from typing the address to an interactive screen. The sweep came out of that path
+afterwards, since the nightly rebuild does it.
+
+**Left for the visitor to press:** the website, because the builder's own gallery shows the feature
+better than a site made in the data layer, and messaging, which needs credentials a demo church
+deliberately does not have.
+
+The suites skipped under HRT-282 are still skipped. They were written against the pool, which no
+longer exists; what replaced them is `clone.test.ts` and the standing test above.
 
 ### HRT-415, a monthly figure that did not say so
 

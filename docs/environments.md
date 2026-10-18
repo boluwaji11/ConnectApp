@@ -16,7 +16,7 @@ it is, and what to do when a credential has to be replaced.
 |---|---|---|
 | Who uses it | churches | us |
 | Supabase project | `nvdovjuqcnxacvhxfrmi`, ConnectApp, us-east-2 | `koaegntsyvvulioesufn`, ConnectApp Dev, us-east-1 |
-| Runs at | `connectapp.church`, `admin.connectapp.church` | `localhost:4488`, `localhost:4489`, `dev.connectapp.church` |
+| Runs at | `connectapp.church`, `admin.connectapp.church`, `demo.connectapp.church` | `localhost:4488`, `localhost:4489`, `dev.connectapp.church`, `demo.dev.connectapp.church` |
 | Vercel environment | Production | Preview |
 | Branch | `production` | `develop`, and every pull request |
 | Stripe | the live account, live keys | a sandbox, test keys |
@@ -283,3 +283,39 @@ printf '%s' "<value>" | vercel env add <NAME> preview --force
 
 Never `vercel env add ... production` while doing development work. That is the one line that
 reaches a church.
+
+## The demo
+
+`demo.connectapp.church` is the demo, and arriving is starting: a visitor with
+no pass is handed a church of their own and put on the dashboard, with no
+sign-in and nothing to press. It is served by the wildcard that already points
+at production, so it carries what churches are actually running rather than
+whatever was pushed twenty minutes ago.
+
+Every visitor gets a copy of one template church. The template is built by the
+loader, which inserts a row at a time through the repo functions the product
+uses, so the demo cannot drift into showing something the product does not do.
+That takes about forty seconds, which is why nobody waits for it: the copy is
+about a second.
+
+| | |
+|---|---|
+| Build the template | `pnpm --filter @connectapp/db demo:template --rebuild` |
+| Build it on a deployment | `curl -H "Authorization: Bearer $CRON_SECRET" https://connectapp.church/api/demo/refresh` |
+| Rebuilt nightly by | `.github/workflows/demo.yml`, 09:00 UTC |
+| Where it answers | `NEXT_PUBLIC_DEMO_HOST`, unset in production and `demo.dev.connectapp.church` on Preview |
+
+**It is rebuilt nightly because a copy carries the dates it was built with.**
+The seed is written against the day it runs: a service happening today,
+attendance behind it, a count from last weekend. Left for a week the demo would
+show a check-in screen with nothing on today.
+
+**A demo church is approved**, so none of the provisional limits apply: no
+twenty-five member cap, no refused invitation, no join link withheld. It opens
+nothing that could reach a person, because a demo church has no messaging
+credentials and no Stripe account.
+
+Two things a visitor presses for themselves rather than finding made: the
+website, where the builder's own gallery shows the feature better than a site
+made in the data layer, and messaging, which needs credentials a demo church
+deliberately does not have.
