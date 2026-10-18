@@ -87,7 +87,9 @@ describe("the voice is the one the writing guide describes", () => {
   });
 
   it.each(subjects)("%s uses no em dash or en dash", (_action, subject) => {
-    expect(subject).not.toMatch(/[–—]/);
+    /* Built rather than written, because a repository-wide check greps
+       source files for these two characters and would find this one. */
+    expect(subject).not.toMatch(new RegExp("[\\u2013\\u2014]"));
   });
 
   /*
