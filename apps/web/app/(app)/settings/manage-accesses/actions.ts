@@ -175,8 +175,8 @@ export async function sendAgain(id: string): Promise<TeamResult> {
 
 export async function withdraw(id: string): Promise<TeamResult> {
   try {
-    await allowed();
-    await revokeInvitation(id);
+    const session = await allowed();
+    await revokeInvitation(session.tenantId, id);
     return {};
   } catch (error) {
     return { error: explain(error) };

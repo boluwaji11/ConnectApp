@@ -143,7 +143,7 @@ describe("what the message is built from", () => {
       role: "staff",
     });
 
-    await revokeInvitation(made.id);
+    await revokeInvitation(tenant, made.id);
     expect(await invitationToSend(tenant, made.id)).toBeNull();
   });
 

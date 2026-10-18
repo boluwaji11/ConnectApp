@@ -133,16 +133,30 @@ export async function claimBatch(sendId: string, size = BATCH): Promise<Waiting[
       set state = 'sending', claimed_at = now()
       from taken
       where r.id = taken.id
-      returning r.id, r.member_id, r.address
+      returning r.id, r.tenant_id, r.member_id, r.address
     )
+    /*
+     * SEC-006. Both joins name the church the recipient belongs to.
+     *
+     * This runs on the owner connection, which the isolation policies do not
+     * constrain, and the consent join had no tenant predicate at all. An
+     * address with no member record, which is what a visiting speaker or a
+     * tradesman typed into the composer is, matched on the address alone, and
+     * consent is unique per church per address rather than globally.
+     * So one church's message could carry another church's unsubscribe token,
+     * and a recipient pressing it was taken off the wrong church's list and
+     * shown the wrong church's name. Two matching rows also duplicated the
+     * recipient, so that address was sent the message twice.
+     */
     select c.id, c.member_id, c.address,
            coalesce(m.preferred_name, m.first_name) as first,
            coalesce(m.preferred_name, m.first_name) || ' ' || m.last_name as name,
            k.token
       from claimed c
-      left join members m on m.id = c.member_id
+      left join members m on m.id = c.member_id and m.tenant_id = c.tenant_id
       left join contact_consent k
         on k.channel = 'email'
+       and k.tenant_id = c.tenant_id
        and (case when c.member_id is null
                  then k.address = c.address and k.member_id is null
                  else k.member_id = c.member_id end)

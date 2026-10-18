@@ -375,8 +375,20 @@ export async function invitationToSend(
   };
 }
 
-export async function revokeInvitation(id: string): Promise<void> {
-  await owner()`update invitations set revoked_at = now() where id = ${id} and accepted_at is null`;
+/**
+ * R1.7. Withdrawing an invitation that has not been accepted.
+ *
+ * SEC-005. The church is named, and it is the caller's own from the session
+ * rather than anything the browser sent. This runs on the owner connection,
+ * which the isolation policies do not constrain, and it took an id and nothing
+ * else: an administrator of one church could withdraw any open invitation on
+ * the platform by knowing its id, which is a write across the tenant boundary
+ * on a table that decides who gets into a church.
+ */
+export async function revokeInvitation(tenantId: string, id: string): Promise<void> {
+  await owner()`
+    update invitations set revoked_at = now()
+     where id = ${id} and tenant_id = ${tenantId} and accepted_at is null`;
 }
 
 export { raw, and, eq, gt, isNull };
