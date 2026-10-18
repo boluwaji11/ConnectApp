@@ -1121,6 +1121,24 @@ of money and after everything else.
 | HRT-416 | demo.connectapp.church, the whole product on invented records | R19.7, R22.1 | Resolved |
 | HRT-417 | Every secret on Vercel is write only | R21.3 | Resolved |
 | HRT-418 | The connected report's chosen band was unreadable | R22.7, R18.x | Resolved |
+| HRT-419 | The editor's markdown cannot write an attribute | R21.2, R16.4 | Resolved |
+| HRT-420 | The money and the children's data are not open to any member | R13.1, R8.8, R8.10, R21.2 | Resolved |
+| HRT-421 | The two owner-connection paths that crossed the tenant boundary | R1.3, R1.7, R16.8 | Resolved |
+| HRT-422 | The export stops handing over the amounts a screen refuses | R19.8, R21.2, R13.11 | Resolved |
+| HRT-423 | A name of ours is not a church's to take, and a redirect is checked | R1.1, R1.4, R1.7, R17.1 | Resolved |
+| HRT-424 | The platform's own tables, and the privileges a blanket grant undid | R21.1, R21.3 | Resolved |
+| HRT-425 | The slug helpers name their tables, so they can pin an empty path | R21.1 | Open |
+| HRT-426 | The pickup list is asked even when nobody says who is collecting | R8.8, R8.9 | Resolved, needs a service day |
+| HRT-427 | The Resend handshake is bound to the browser that started it | R16.1, R21.15 | Resolved |
+| HRT-428 | Smaller boundaries: TLS, constant time, a key's shape, an owner, a thread | R21.15, R10.5, R16.14 | Resolved |
+| HRT-429 | A picker is a read of the directory, so it asks the same permission | R3.2, R3.4, R21.2 | Resolved |
+| HRT-430 | Secrets out of the audit log, a recorded read, and a child called an adult | R1.11, R6.2, R3.4 | Resolved |
+| HRT-431 | A limit on what an unauthenticated caller can make us do | R21.5, R13.2 | Resolved |
+| HRT-432 | drizzle-orm to 0.45.x, behind the isolation suite | R21.1 | Open |
+| HRT-433 | The development gate applies to the demo host too | R21.3, R19.7 | Resolved |
+| HRT-434 | What an operator read, not only what they changed | R1.11, R21.3 | Open |
+| HRT-435 | Append-only enforced in the database, not by the absence of a writer | R1.11, R8.x | Open |
+| HRT-436 | The station forgets a church when it is signed out of | R8.20, R21.2 | Open |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |
@@ -4510,6 +4528,68 @@ dashboard refund actually raises.
 Five tests in `giving.test.ts` hold it: a refund the product never issued, four deliveries of one
 refund leaving the total at one refund, a second refund followed by one the bank refused, a figure
 larger than the gift, and another church's account.
+
+### The October 2026 security review, HRT-419 to HRT-436
+
+A systematic review of the whole platform, run on 17 and 18 October 2026. Thirty
+findings, one critical, ten high. The record is
+[docs/security-audit.md](docs/security-audit.md); the conventions that came out
+of it are [docs/security-hardening.md](docs/security-hardening.md).
+
+**The one that mattered most was HRT-426**, and it was not a cross-church leak
+or anything to do with money. `releaseBlock` asked the authorised pickup list
+and any do-not-contact order only when the volunteer had named who was
+collecting, and the checkout dialog opens with nobody named and offers "someone
+else", which maps to nobody. So the ordinary path through the screen released a
+child on the code alone, with no list consulted, no reason asked for and no
+override row written. R8.8 says the pickup list is enforced at checkout, and it
+was enforced only when somebody volunteered their name.
+
+**The shape most of the rest shared.** The documented design puts the permission
+check in the repository function, and that is right for writes. Repository
+readers take no actor: row-level security supplies the tenant and nothing
+supplies the role. So the writes were refused correctly everywhere, and
+twenty-odd reads were refused nowhere. A member could read the staff directory,
+the church's mailing history, any past send's body, every child's medical note
+and pickup list, and the live security code of every child checked in. That last
+group is the whole of what a desk asks for before releasing a child, which is
+why HRT-420 and HRT-426 are the same story told twice.
+
+**Two crossed the tenant boundary**, which is the class the isolation suite
+exists to catch and did not, because both ran on the owner connection where the
+policies do not apply. `revokeInvitation` took an id and no church.
+The send worker joined consent with no tenant predicate, so one church's message
+could carry another church's unsubscribe link.
+
+**One suite had the finding written down as an expectation.**
+`isolation.test.ts` required a tenant policy on every table carrying a
+`tenant_id`, which includes `platform_events`, so it was requiring the policy
+that let a church read the operator notes about itself and passing because it
+was there. `hardening.test.ts` filtered `pg_proc` by the same four names it then
+asserted the result equalled, so it could only fail if one of four went missing
+and could never notice the six that were failing its next two assertions. Both
+read the catalogue now.
+
+**`apps/web` had no tests at all**, which is why several pure functions on
+security boundaries had never been run: the markdown-to-HTML escaper, the
+redirect allowlist, the dev-gate pass, the frame policy. It has a harness now
+and CI runs it. Every fix in this run has a test, and every test was run with
+its fix reverted to confirm it fails; two of them caught bugs in the fixes
+themselves, including one that would have made the development deployment answer
+nothing at all.
+
+**Measured rather than assumed.** The check-in change reads both lists on every
+child checkout instead of only when a collector is named, as two indexed reads
+by member id inside the transaction that was already open, issued together; the
+named path is a round trip cheaper than before. The headers add nothing: the
+policy is a pure function of the path.
+
+**Left open, with reasons on the board:** HRT-425, HRT-432, HRT-434, HRT-435 and
+HRT-436. Three findings need `pnpm db:migrate` run against each environment
+before they take effect, because they live in `sql/security.sql`, and CI verifies
+that file against a throwaway Postgres on every push. HRT-426 needs walking
+through a real service before it ships, because it changes the desk flow at the
+busiest minute of the week.
 
 ### HRT-417, secrets that could be read back
 

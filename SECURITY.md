@@ -23,6 +23,15 @@ A useful report includes:
 - Whether it crosses a church boundary, touches children's records, or touches money.
 - Anything you think we will get wrong when we try to reproduce it.
 
+## What we have reviewed ourselves
+
+[docs/security-audit.md](docs/security-audit.md) is the record of the October
+2026 review: what was examined, what was found, what is fixed, and what is still
+open. It carries no exploit steps, because this repository is public.
+
+[docs/security-hardening.md](docs/security-hardening.md) is the set of
+conventions that came out of it, which is what new code is written against.
+
 ## What happens next
 
 - We acknowledge the report.

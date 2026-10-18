@@ -59,6 +59,9 @@ New here? Read [the project README](../README.md), then
 |---|---|
 | [Security](../SECURITY.md) | Reporting a vulnerability, and how church data is protected |
 | [Backup and restore](backup-and-restore.md) | The restore runbook, the census tool, the quarterly drill log |
+| [security-audit.md](security-audit.md) | The October 2026 security review: findings, severities and what is fixed |
+| [security-hardening.md](security-hardening.md) | The conventions that came out of it, which new code is written against |
+| [security/mfa-readiness.md](security/mfa-readiness.md) | The engineering handoff for multifactor authentication |
 | [Drill records](../drills/README.md) | What the committed census files are, and why they carry no church data |
 
 ## Hearth Stage

@@ -77,3 +77,7 @@ next-env.d.ts
 
 # Vercel
 .vercel
+
+# The security review's working notes. Traced paths and payloads, for the
+# maintainers. docs/security-audit.md is the public record.
+security-audit-private.md
