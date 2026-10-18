@@ -4548,6 +4548,16 @@ and `domain.reading` keys.
 **What it says about the board:** a story can be marked Closed on the strength
 of the code existing. Nothing checked that a person could reach it.
 
+**Cloudflare raised the stakes on 17 October.** Reviewing our Domain Connect template, they pointed
+out that Cloudflare ignores `txtConflictMatchingMode`, so a TXT record only conflicts with an
+identical one: where a church already has a different key at `resend._domainkey`, both records stay
+and DKIM verification becomes unreliable. That is exactly what `dkimTaken` in
+`packages/db/src/domain/preflight.ts` detects and what `warningsFor` already builds a warning for,
+and no screen reads either. So the answer to this story's question is yes, and the one-press flow we
+are asking DNS companies to adopt is what makes it urgent: a church that presses the button on a
+domain already carrying somebody else's DKIM key gets mail that sometimes authenticates and
+sometimes does not, with nothing having told it.
+
 ### HRT-406, the restore drill has never been run
 
 Found during the October 2026 repository audit.
