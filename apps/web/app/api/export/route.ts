@@ -42,7 +42,14 @@ export async function GET(request: NextRequest) {
       (tx) =>
         buildArchive(
           tx,
-          { tenantId: session.tenantId, role: session.role },
+          {
+            tenantId: session.tenantId,
+            role: session.role,
+            /* SEC-007, SEC-024. The permissions decide what the archive holds,
+               and the user is who a confidential read is recorded against. */
+            userId: session.userId,
+            permissions: session.permissions,
+          },
           { name: session.tenantName, slug: session.tenantSlug },
         ),
     );

@@ -55,6 +55,12 @@ beforeAll(async () => {
   });
   /* The household needs a child for the age rules; nothing reads her id. */
   await make("Chloe", "2016-05-20", { householdId: household, householdRole: "child" });
+  /* SEC-025. And one the church never recorded a birthday for, which is the
+     common case: a family fills in names on a connection card and not dates. */
+  await make("Noah", null as unknown as string, {
+    householdId: household,
+    householdRole: "child",
+  });
   loner = await make("Lonnie", "1970-01-01");
 });
 
@@ -150,6 +156,27 @@ describe("the directory (R3.1)", () => {
     const chloe = find(after, "Chloe Privacy")!;
     expect(chloe.isChild).toBe(true);
     expect([chloe.email, chloe.phone, chloe.birthday]).toEqual([null, null, null]);
+  });
+
+  /*
+   * SEC-025, R3.4. A minor with no birthday on file is still a minor.
+   *
+   * The age test read the date of birth and nothing else, so this child fell
+   * through to the adult branch, where `listed` defaults to true and contact
+   * details are published if anything ever set the preference. The directory is
+   * the one surface that publishes and it was the one place without the
+   * household-role fallback that the check-in lookup and the station roster
+   * both have.
+   */
+  it("treats a child with no recorded birthday as a child", async () => {
+    const all = await run((tx) => memberDirectory(tx, { asOf: TODAY }), "member");
+    const noah = find(all, "Noah Privacy");
+
+    /* Visible at all only because the head opted in above, and then only as a
+       name: never an address, a phone or a birthday. */
+    expect(noah?.isChild).toBe(true);
+    expect([noah?.email, noah?.phone, noah?.birthday, noah?.address])
+      .toEqual([null, null, null, null]);
   });
 
   it("finds somebody by their name or their household", async () => {

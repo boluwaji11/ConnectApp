@@ -5,6 +5,7 @@ import {
   type TenantRole, type Permission, type Who,
 } from "../roles";
 import { decryptNote } from "../crypto";
+import { auditEntries } from "../schema/audit";
 import { toCsv } from "./csv";
 
 /**
@@ -186,6 +187,8 @@ export async function buildArchive(
   actor: {
     tenantId: string;
     role: TenantRole;
+    /** SEC-024, R6.2. Named in the audit entry a confidential read writes. */
+    userId?: string | null;
     permissions?: readonly Permission[] | null;
   },
   church: { name: string; slug: string },
@@ -197,6 +200,8 @@ export async function buildArchive(
   const data: Record<string, Record<string, unknown>[]> = {};
   const counts: Record<string, number> = {};
   const withheld: string[] = [];
+  /** SEC-024, R6.2. Which confidential notes this export opened. */
+  const readConfidential: string[] = [];
 
   /*
    * R19.8. What each table's columns are called, whether or not it holds rows.
@@ -227,7 +232,7 @@ export async function buildArchive(
     )) as unknown as Record<string, unknown>[];
 
     const cleaned = rows
-      .map((row) => clean(table, row, actor, withheld))
+      .map((row) => clean(table, row, actor, withheld, readConfidential))
       .filter((row): row is Record<string, unknown> => row !== null);
 
     /* SEC-007. Said once for the table rather than once per row, and said
@@ -239,6 +244,28 @@ export async function buildArchive(
 
     data[table] = cleaned;
     counts[table] = cleaned.length;
+  }
+
+  /*
+   * SEC-024, R6.2. Every confidential note this export opened, recorded.
+   *
+   * One statement rather than one per note, because an export of a church with
+   * a long pastoral history would otherwise be hundreds of round trips. The
+   * entries are the same shape `listNotesForPerson` writes, so the log reads
+   * the same whether somebody opened one note on a screen or took them all in
+   * a file.
+   */
+  if (readConfidential.length > 0) {
+    await db.insert(auditEntries).values(
+      readConfidential.map((id) => ({
+        tenantId: actor.tenantId,
+        actorUserId: actor.userId ?? null,
+        actorRole: actor.role,
+        action: "read" as const,
+        entity: "notes",
+        entityId: id,
+      })),
+    );
   }
 
   const csv: Record<string, string> = {};
@@ -311,6 +338,8 @@ function clean(
   row: Record<string, unknown>,
   role: Who,
   withheld: string[],
+  /** SEC-024. Confidential notes this export actually decrypted. */
+  readConfidential: string[] = [],
 ): Record<string, unknown> | null {
   if (GIVING_TABLES.has(table) && !canReadGivingAmounts(role)) {
     return null;
@@ -345,6 +374,18 @@ function clean(
 
   if (canReadConfidentialNotes(role)) {
     out["body"] = typeof encrypted === "string" ? decryptNote(encrypted) : out["body"];
+    /*
+     * SEC-024, R6.2. Read, and therefore recorded.
+     *
+     * Every confidential note read through `listNotesForPerson` writes an
+     * audit entry naming the reader, which is the third of the three layers
+     * R6.2 asks for. This path decrypts the same bodies, in bulk, and wrote
+     * nothing: a single download took every confidential note in the church
+     * and the log showed no read at all. The ids are collected here and the
+     * rows are written by the caller, which is the only place with the
+     * transaction.
+     */
+    if (typeof out["id"] === "string") readConfidential.push(out["id"]);
     return out;
   }
 

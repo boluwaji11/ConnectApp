@@ -88,6 +88,9 @@ export async function memberDirectory(
          where hm.household_id = ${households.id} and hm.role = 'head' and hm.ended_on is null
          limit 1
       )`,
+      /* SEC-025. What the household says they are, for when no birthday was
+         recorded. See the note where this is read. */
+      householdRole: householdMemberships.role,
     })
     .from(members)
     .leftJoin(
@@ -106,8 +109,19 @@ export async function memberDirectory(
   const loose: DirectoryEntry[] = [];
 
   for (const row of rows) {
+    /*
+     * SEC-025, R3.4. A minor with no birthday on file is still a minor.
+     *
+     * This read the date of birth and nothing else, so a child whose birthday
+     * the church had never entered fell through to the adult branch, where
+     * `listed` defaults to true and an email, a phone, the household address
+     * and a photo are shown if anything ever set those preferences. The
+     * directory is the one place that publishes, and it was the one place
+     * without the fallback: `lookupPeople` and `stationRoster` both read the
+     * household role when the date is missing.
+     */
     const months = row.dateOfBirth ? ageInMonths(row.dateOfBirth, opts.asOf) : null;
-    const isChild = months !== null && months < ADULT_MONTHS;
+    const isChild = months !== null ? months < ADULT_MONTHS : row.householdRole === "child";
     const head = row.headOf ? own(byPerson.get(row.headOf)) : null;
 
     const entry = entryFor(

@@ -19,6 +19,8 @@ let northgate: string;
 let northgatePersonId: string;
 let riversideSubjectId: string;
 let tenantTables: string[];
+/** SEC-023. When this run began, so the sweep below reads its own rows. */
+const startedAt = new Date();
 
 beforeAll(async () => {
   const sql = owner();
@@ -343,6 +345,49 @@ describe("the audit log is append only (R1.11)", () => {
     for (const row of rows) {
       expect(Object.keys(row.after ?? {})).not.toContain("body_encrypted");
       expect(Object.keys(row.after ?? {})).not.toContain("body");
+    }
+  });
+
+  /*
+   * SEC-023. The same argument, applied to everything else that is a secret.
+   *
+   * The reason written on the note case is "the log is read by more people
+   * than the note is". That is truer of a child's pickup code than of a note:
+   * it is the one control between a stranger and a child, and every live code
+   * was landing in a table an Owner can read and nothing can edit. The same
+   * goes for the two tokens that are somebody's whole credential on a public
+   * path, and for the second of the two sealed provider columns.
+   *
+   * Written as a table of entity and column so a new secret is one line.
+   *
+   * Scoped to rows written during this run. The trigger decides what a new row
+   * carries and cannot reach back into the ones already there, so a database
+   * that was audited before this existed still holds codes in rows that
+   * nothing can edit or delete. Sweeping the whole table would make this test
+   * a permanent red on any such database while saying nothing about whether
+   * the trigger is right, and clearing that history is a deliberate one-off on
+   * the owner connection rather than something a test should imply.
+   */
+  it("never records a secret, whichever table it belongs to", async () => {
+    const SECRETS: [string, string][] = [
+      ["checkin_visits", "code"],
+      ["contact_consent", "token"],
+      ["serving_assignments", "respond_token"],
+      ["church_providers", "credential"],
+      ["church_providers", "access_token"],
+      ["notes", "body_encrypted"],
+    ];
+
+    for (const [entity, column] of SECRETS) {
+      const rows = await owner()<{ before: Record<string, unknown> | null; after: Record<string, unknown> | null }[]>`
+        select before, after from audit_entries
+         where entity = ${entity} and at >= ${startedAt}`;
+      for (const row of rows) {
+        expect(Object.keys(row.after ?? {}), `${entity}.${column} in after`)
+          .not.toContain(column);
+        expect(Object.keys(row.before ?? {}), `${entity}.${column} in before`)
+          .not.toContain(column);
+      }
     }
   });
 });

@@ -285,9 +285,38 @@ begin
   -- and no read path selects it, and an audit row carrying it would put every
   -- church's mail password into a log that Owner can read and that nothing can
   -- ever edit. Who connected what still lands here: only the secret comes out.
+  --
+  -- SEC-023. `access_token` is sealed with the same key and carries the same
+  -- objection, and it was the one of the two that stayed in the log.
   if tg_table_name = 'church_providers' then
-    v_before := v_before - 'credential';
-    v_after  := v_after  - 'credential';
+    v_before := v_before - 'credential' - 'access_token';
+    v_after  := v_after  - 'credential' - 'access_token';
+  end if;
+
+  -- SEC-023. A child's pickup code, which is the strongest reason of the lot.
+  --
+  -- The argument written above for a note is "the log is read by more people
+  -- than the note is", and it is truer here: a security code is the one control
+  -- between a stranger and a child, and every live code was landing in a table
+  -- that an Owner can read and that nothing can edit or delete. The visit, the
+  -- room and the times still land. Only the code comes out.
+  if tg_table_name = 'checkin_visits' then
+    v_before := v_before - 'code';
+    v_after  := v_after  - 'code';
+  end if;
+
+  -- SEC-023. The tokens that are somebody's whole credential on a public path:
+  -- the unsubscribe link, and the one a serving request is answered by. A
+  -- guessable one would let anybody take anybody off the church's list, which
+  -- is what the column's own comment says, and a logged one needs no guessing.
+  if tg_table_name = 'contact_consent' then
+    v_before := v_before - 'token';
+    v_after  := v_after  - 'token';
+  end if;
+
+  if tg_table_name = 'serving_assignments' then
+    v_before := v_before - 'respond_token';
+    v_after  := v_after  - 'respond_token';
   end if;
 
   insert into public.audit_entries (tenant_id, actor_user_id, actor_role, action, entity, entity_id, before, after, ip)

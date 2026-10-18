@@ -181,6 +181,46 @@ describe("field-level permissions apply to an export too (R1.5, R21.2)", () => {
     expect(archive.meta.withheld).toContain("notes.body");
   });
 
+  /*
+   * SEC-024, R6.2. "Every read is audited" has to include the one that reads
+   * them all.
+   *
+   * `listNotesForPerson` writes an entry per confidential note it opens, which
+   * is the third of the three layers R6.2 asks for. This path decrypts the same
+   * bodies in bulk and wrote nothing, so a single download took every
+   * confidential note in the church and the log showed no read at all.
+   */
+  it("records the confidential notes it opened", async () => {
+    const before = await owner()<{ n: number }[]>`
+      select count(*)::int as n from audit_entries
+       where tenant_id = ${riverside.id} and entity = 'notes' and action = 'read'`;
+
+    const archive = await archiveFor(riverside, "owner");
+    const opened = (archive.data["notes"] ?? []).filter(
+      (n) => n["classification"] === "confidential",
+    );
+    expect(opened.length).toBeGreaterThan(0);
+
+    const after = await owner()<{ n: number }[]>`
+      select count(*)::int as n from audit_entries
+       where tenant_id = ${riverside.id} and entity = 'notes' and action = 'read'`;
+
+    expect((after[0]?.n ?? 0) - (before[0]?.n ?? 0)).toBe(opened.length);
+  });
+
+  it("records nothing for a role that never opened one", async () => {
+    const before = await owner()<{ n: number }[]>`
+      select count(*)::int as n from audit_entries
+       where tenant_id = ${riverside.id} and entity = 'notes' and action = 'read'`;
+
+    await archiveFor(riverside, "admin");
+
+    const after = await owner()<{ n: number }[]>`
+      select count(*)::int as n from audit_entries
+       where tenant_id = ${riverside.id} and entity = 'notes' and action = 'read'`;
+    expect(after[0]?.n).toBe(before[0]?.n);
+  });
+
   it("never writes a sealed provider credential, under either of its names", async () => {
     const archive = await archiveFor(riverside, "owner");
     for (const row of archive.data["church_providers"] ?? []) {
