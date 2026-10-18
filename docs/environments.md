@@ -345,3 +345,35 @@ source, which means issuing a new key at Stripe or Supabase and replacing it
 here. That is worth doing when a value may have been seen by somebody who
 should not have seen it. None of these has been, so they were not rotated, and
 rotating for its own sake buys nothing and risks an outage.
+
+## Moving a change to production
+
+HRT-440. Three things in a fixed order: the database, because a column has to
+exist before the code that selects it is live; the environment, because a
+variable that is not there is a screen that throws; then the code.
+
+```
+pnpm ship          what it would do, and nothing else
+pnpm ship --go     the same, and then do it
+```
+
+It reads production and writes nothing without `--go`, which also asks for the
+commit to be typed back before it moves anything. What it checks:
+
+| | |
+|---|---|
+| Branch and working tree | On main, nothing uncommitted, matching origin |
+| Commits to move | How many, and what they say |
+| CI | Green, on this exact commit |
+| Migrations | How many production has not had, by name |
+| Environment | Every name `.env.example` documents, set in Vercel |
+
+A failed check stops `--go`. A warning does not: a pending migration is a
+warning, because applying it is the point.
+
+**It only reads the linked Vercel project.** The other app is a separate link
+and asking for it from here means naming a scope, which is right in one
+environment and wrong in another. It says so rather than pretending.
+
+`pnpm --filter @connectapp/db pending` answers the migration question on its
+own, against whichever database the environment names.

@@ -111,7 +111,16 @@ export async function markTwoStepOn(userId: string): Promise<void> {
  */
 export async function markTwoStepOff(userId: string): Promise<void> {
   await owner().begin(async (tx) => {
-    await tx`delete from auth.mfa_factors where user_id = ${userId}`;
+    /*
+     * `auth` is Supabase's schema and belongs to the deployment rather than to
+     * these migrations. A plain Postgres, which is what the test container is,
+     * does not have it, and an unguarded delete made every one of these fail
+     * on a database that is otherwise complete. Asked for rather than assumed.
+     */
+    const [auth] = await tx<{ there: boolean }[]>`
+      select to_regclass('auth.mfa_factors') is not null as there`;
+    if (auth?.there) await tx`delete from auth.mfa_factors where user_id = ${userId}`;
+
     await tx`update app_users set mfa_enrolled_at = null where id = ${userId}`;
     await tx`delete from account_recovery_codes where user_id = ${userId}`;
   });

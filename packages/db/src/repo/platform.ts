@@ -550,7 +550,12 @@ export async function clearTwoStep(
    * deleted here rather than through Supabase.
    */
   await owner().begin(async (tx) => {
-    await tx`delete from auth.mfa_factors where user_id = ${userId}`;
+    /* Supabase's schema, which a plain Postgres does not have. See
+       markTwoStepOff for why this is asked for rather than assumed. */
+    const [auth] = await tx<{ there: boolean }[]>`
+      select to_regclass('auth.mfa_factors') is not null as there`;
+    if (auth?.there) await tx`delete from auth.mfa_factors where user_id = ${userId}`;
+
     await tx`update app_users set mfa_enrolled_at = null where id = ${userId}`;
     await tx`delete from account_recovery_codes where user_id = ${userId}`;
   });

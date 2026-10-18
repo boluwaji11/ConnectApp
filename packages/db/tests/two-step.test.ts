@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { owner, closeConnections } from "../src/client";
+import { hasAuthSchema } from "./helpers/auth-schema";
 import {
   twoStepFor, markTwoStepOn, markTwoStepOff,
   issueRecoveryCodes, spendRecoveryCode, RECOVERY_CODE_COUNT,
@@ -21,12 +22,17 @@ const OTHER = "dddddddd-2222-4222-8222-222222222222";
  * this product keeps. Both, because `markTwoStepOff` deletes the factor and a
  * factor points at `auth.users`.
  */
+/* Asked once, at collection, so the cases that need it can skip themselves. */
+const auth = await hasAuthSchema();
+
 async function makeUser(id: string, email: string) {
   await owner()`delete from app_users where id = ${id}`;
-  await owner()`delete from auth.users where id = ${id}`;
-  await owner()`
-    insert into auth.users (id, instance_id, aud, role, email)
-    values (${id}, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', ${email})`;
+  if (auth) {
+    await owner()`delete from auth.users where id = ${id}`;
+    await owner()`
+      insert into auth.users (id, instance_id, aud, role, email)
+      values (${id}, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', ${email})`;
+  }
   await owner()`insert into app_users (id, email) values (${id}, ${email})`;
 }
 
@@ -37,7 +43,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await owner()`delete from app_users where id in (${PERSON}, ${OTHER})`;
-  await owner()`delete from auth.users where id in (${PERSON}, ${OTHER})`;
+  if (auth) await owner()`delete from auth.users where id in (${PERSON}, ${OTHER})`;
   await closeConnections();
 });
 
@@ -139,7 +145,7 @@ describe("recovery codes", () => {
   });
 });
 
-describe("the factor itself", () => {
+describe.runIf(auth)("the factor itself", () => {
   /*
    * Supabase will not unenroll a verified factor from a session that has not
    * presented one: "AAL2 required to unenroll verified factor". The path that
