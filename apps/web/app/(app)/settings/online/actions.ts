@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import {
   withTenant, getChurch, getStripeAccount, saveStripeAccount, markNonprofitRate,
+  canManageGiving, PermissionError,
 } from "@connectapp/db";
 import { t } from "@connectapp/i18n";
 import { explain } from "@/lib/explain";
@@ -40,6 +41,20 @@ export interface ConnectResult {
   url?: string;
 }
 
+/**
+ * SEC-002, R13.1. Who this screen's actions belong to.
+ *
+ * Every action in this file is about the church's own Stripe account: creating
+ * it, relinking it, reading the payout bank off it, changing what it may
+ * charge. The permission is checked here rather than in each one, because a
+ * server action is reachable by anybody who can post to it whatever the screen
+ * draws, and the gate was previously only on the screen.
+ *
+ * It mattered most for `connectStripe`, which answered a plain member with a
+ * live `account_onboarding` link into the church's account, and for the
+ * capability writes, which reached Stripe before `saveStripeAccount` did the
+ * only checking.
+ */
 async function context() {
   const session = await requireSession();
   const who = {
@@ -48,6 +63,7 @@ async function context() {
     userId: session.userId,
     permissions: session.permissions,
   };
+  if (!canManageGiving(who)) throw new PermissionError(who.role, "manageGiving");
   return { session, actor: who, ctx: who };
 }
 

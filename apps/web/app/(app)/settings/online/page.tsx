@@ -83,7 +83,9 @@ export default async function OnlineGivingPage({
   const wrongMode = Boolean(account) && account?.livemode !== stripeLive();
 
   let unreachable = false;
-  if (stale && account && (!account.chargesEnabled || wrongMode)) {
+  /* SEC-002. Both calls below are manage-only actions now, so a reader who may
+     not manage giving must not make them: they would throw rather than render. */
+  if (stale && manage && account && (!account.chargesEnabled || wrongMode)) {
     unreachable = (await syncStripe()).error === "stripe.unreachable";
     account = await withTenant(
       { tenantId: session.tenantId, role: session.role },
@@ -121,7 +123,7 @@ export default async function OnlineGivingPage({
      here and the other is a call to Stripe. */
   const [address, face] = await Promise.all([
     publicLink(session.tenantSlug, "give"),
-    read.account ? accountFace() : { name: null, bank: null, payouts: null },
+    read.account && manage ? accountFace() : { name: null, bank: null, payouts: null },
   ]);
 
   /*

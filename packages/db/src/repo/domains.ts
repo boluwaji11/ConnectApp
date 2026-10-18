@@ -7,7 +7,7 @@ import { InvalidInputError, NameTakenError } from "../errors";
 import { canManageChurch } from "./church";
 import type { WriteActor } from "./members";
 import {
-  cleanDomain, slugUnderPlatform, cleanPortalName, isReservedName,
+  cleanDomain, slugUnderPlatform, cleanPortalName, isReservedName, isPlatformHost,
 } from "./portal-rules";
 
 /**
@@ -95,6 +95,20 @@ export async function resolveTenantByHost(
     return hold(bare, found ? { ...found, portalName: found.portal_name } : null);
   }
 
+  /*
+   * R21.1. A name of ours is never answered out of custom_domain.
+   *
+   * The branch above is the only way a host under the platform names a church,
+   * and it refuses the apex and every reserved label. Falling through to the
+   * custom domain lookup handed those names back: a church holding
+   * `connectapp.church` became the church the front door resolved to, and
+   * every member of every other church met `/choose-church?reason=denied`.
+   *
+   * Refused on the way in as well, in setCustomDomain. This is the half that
+   * also neutralises a row written before that check existed.
+   */
+  if (isPlatformHost(bare)) return hold(bare, null);
+
   const rows = await owner()<
     { id: string; name: string; slug: string; portal_name: string | null }[]
   >`
@@ -128,6 +142,23 @@ export async function setCustomDomain(
 
   const bare = input.domain?.trim() ? cleanDomain(input.domain) : null;
   if (input.domain?.trim() && !bare) throw new InvalidInputError("domain.error.shape");
+
+  /*
+   * R21.1. One of our own names is not a church's to take.
+   *
+   * A custom domain is a name the church owns and points here, and nothing
+   * stopped it being one of ours. `resolveTenantByHost` answers the custom
+   * domain lookup for every host that is not a single unreserved label under
+   * the platform, so `connectapp.church` itself, `www.connectapp.church`, and
+   * every reserved name under it, `give`, `admin`, `security`, `support`, were
+   * all claimable. Taking the apex points the front door at one church and
+   * refuses everybody else at it.
+   *
+   * The reserved list was already applied to the portal name, where a church
+   * picks a label under our own domain, and never to this, where it can write
+   * the whole host.
+   */
+  if (bare && isPlatformHost(bare)) throw new InvalidInputError("domain.error.ours");
 
   if (bare) {
     const [taken] = await db

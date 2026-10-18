@@ -5,6 +5,7 @@ import {
   checkInFamily, visitsFor, undoCheckIn, roomCounts,
   checkOut, pickupList, stationRoster, reserveCodes, reconcile,
   roomBoard, roomRoster, arriving, moveToRoom,
+  canCheckIn, canSupervise, PermissionError,
   type CheckinEntry, type OverrideKind, type PickupPerson,
   type Roster, type OfflineEvent, type Reconciliation,
   type Board, type RoomRosterEntry, type ArrivingChild,
@@ -15,14 +16,38 @@ import { requireSession } from "@/lib/session";
 import { churchNow } from "@/lib/church-now";
 import { getChurch } from "@connectapp/db";
 
+/**
+ * SEC-004, R8.x. Who is at the desk.
+ *
+ * `permissions` is carried on the actor as well as on the transaction context.
+ * Without it a church that wrote its own check-in role was refused by every
+ * `canCheckIn` below, because a custom role holder carries `role: "member"`
+ * and its grants live in the array.
+ */
 async function context() {
   const session = await requireSession();
-  return {
-    session,
-    actor: { tenantId: session.tenantId, role: session.role },
-    ctx: { tenantId: session.tenantId, role: session.role, userId: session.userId, permissions: session.permissions },
+  const who = {
+    tenantId: session.tenantId,
+    role: session.role,
+    userId: session.userId,
+    permissions: session.permissions,
   };
+  return { session, actor: who, ctx: who };
 }
+
+/**
+ * SEC-004, R8.8, R8.10. The reads on this screen are not public to the church.
+ *
+ * The writes here were refused in the repository, which is the documented
+ * design, and the reads were refused nowhere: `find`, `pickup` and `floor`
+ * carried no check of any kind, and a server action answers whoever can post
+ * to it whatever the screen draws. So any signed-in member of the church could
+ * read every child's allergies and free-text medical note, the authorised
+ * pickup list with its do-not-contact markers, and the live security code of
+ * every child currently checked in. Those three together are what a stranger
+ * would need to collect somebody else's child.
+ */
+
 
 export interface ClaimResult {
   /** Null when the station has been retired, or belongs to another church. */
@@ -38,7 +63,8 @@ export interface ClaimResult {
  * configuration nobody maintains.
  */
 export async function claim(stationId: string): Promise<ClaimResult> {
-  const { ctx } = await context();
+  const { actor, ctx } = await context();
+  if (!canCheckIn(actor)) throw new PermissionError(actor.role, "checkIn");
   const station = await withTenant(ctx, (tx) => claimStation(tx, stationId));
   return { name: station?.name ?? null };
 }
@@ -94,9 +120,10 @@ export async function find(
   query: string,
   occurrenceId: string,
   ): Promise<FindResult> {
-  const { session, ctx } = await context();
+  const { session, actor, ctx } = await context();
 
   try {
+    if (!canCheckIn(actor)) throw new PermissionError(actor.role, "checkIn");
     return await withTenant(ctx, async (tx) => {
       const profile = await getChurch(tx, session.tenantId);
       const asOf = churchNow(profile?.timezone ?? "America/Chicago").date;
@@ -195,8 +222,9 @@ export interface PickupResult {
 
 /** R8.8. Who the church has recorded as allowed to collect this child. */
 export async function pickup(childId: string): Promise<PickupResult> {
-  const { ctx } = await context();
+  const { actor, ctx } = await context();
   try {
+    if (!canCheckIn(actor)) throw new PermissionError(actor.role, "checkIn");
     return { members: await withTenant(ctx, (tx) => pickupList(tx, childId)) };
   } catch (error) {
     return { error: explain(error) };
@@ -289,6 +317,12 @@ export async function snapshot(
   const { session, actor, ctx } = await context();
 
   try {
+    /* SEC-004. Said outright. This was refused only because `reserveCodes`
+       further down the same `Promise.all` refuses, which is a guard one
+       reordering away from not being one, and the roster it returns is every
+       member's medical note and every child's pickup list. */
+    if (!canCheckIn(actor)) throw new PermissionError(actor.role, "checkIn");
+
     return await withTenant(ctx, async (tx) => {
       const profile = await getChurch(tx, session.tenantId);
       const asOf = churchNow(profile?.timezone ?? "America/Chicago").date;
@@ -375,9 +409,10 @@ export interface FloorResult {
  * somebody will trust it in the minute they should be walking to the room.
  */
 export async function floor(occurrenceId: string): Promise<FloorResult> {
-  const { session, ctx } = await context();
+  const { session, actor, ctx } = await context();
 
   try {
+    if (!canSupervise(actor)) throw new PermissionError(actor.role, "checkIn");
     return await withTenant(ctx, async (tx) => {
       const profile = await getChurch(tx, session.tenantId);
       const today = churchNow(profile?.timezone ?? "America/Chicago").date;

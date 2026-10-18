@@ -3735,6 +3735,7 @@ export const en = {
   "domain.record.target": "Points to",
   "domain.error.shape": "Enter a domain name, without https:// and without a path.",
   "domain.error.taken": "{name} is already pointed at another church.",
+  "domain.error.ours": "That address belongs to ConnectApp. Use a domain your church owns.",
   "site.title": "On your website",
   "site.account": "My account link",
   "site.account.open": "Let somebody new create their own account here",

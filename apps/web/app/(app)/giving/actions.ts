@@ -139,9 +139,28 @@ export async function giveBack(
   cents: number,
   ): Promise<GivingResult> {
   const { actor, ctx } = await context();
+  /*
+   * SEC-003, R13.15. Asked before the money moves, not after.
+   *
+   * `refundGift` holds the only permission check on this path and it runs
+   * last, so a reader who may not manage giving still reached
+   * `stripe().refunds.create` and moved real money out of the church's Stripe
+   * balance. The write was then refused, which left Stripe and the church's
+   * books disagreeing with nothing on either side saying why.
+   *
+   * The amount is bounded here for the same reason: `refundGift` checks it
+   * against what the gift has left, and it checked after Stripe had agreed to
+   * whatever was asked for.
+   */
   try {
+    if (!canManageGiving(actor)) throw new PermissionError(actor.role, "recordGift");
+
     const gift = await withTenant(ctx, (tx) => giftCharge(tx, id));
     if (!gift) return { error: "gift.error.missing" };
+
+    const amount = Math.round(cents);
+    if (!Number.isInteger(amount) || amount <= 0) return { error: "gift.error.refund" };
+    if (amount + gift.refundedCents > gift.amountCents) return { error: "gift.error.refund" };
 
     /*
      * R13.15. A card is answered at once and a bank account is not: Stripe
@@ -156,7 +175,7 @@ export async function giveBack(
       if (!account) return { error: "stripe.unconfigured" };
 
       const back = await stripe().refunds.create(
-        { charge: gift.chargeId, amount: cents },
+        { charge: gift.chargeId, amount },
         asChurch(account.accountId),
       );
       how = {
@@ -165,7 +184,7 @@ export async function giveBack(
       };
     }
 
-    await withTenant(ctx, (tx) => refundGift(tx, actor, id, cents, how));
+    await withTenant(ctx, (tx) => refundGift(tx, actor, id, amount, how));
     revalidatePath("/giving");
     return {};
   } catch (error) {
