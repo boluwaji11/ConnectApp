@@ -10,17 +10,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const listFactors = vi.fn();
+const unenroll = vi.fn(async () => ({ error: null }));
 
 vi.mock("@/lib/supabase/server", () => ({
-  supabaseServer: async () => ({ auth: { mfa: { listFactors } } }),
+  supabaseServer: async () => ({ auth: { mfa: { listFactors, unenroll } } }),
 }));
+
+const markTwoStepOff = vi.fn();
+const spendRecoveryCode = vi.fn();
 
 vi.mock("@connectapp/db", () => ({
   twoStepFor: vi.fn(),
   markTwoStepOn: vi.fn(),
-  markTwoStepOff: vi.fn(),
-  issueRecoveryCodes: vi.fn(),
-  spendRecoveryCode: vi.fn(),
+  markTwoStepOff,
+  issueRecoveryCodes: vi.fn(async () => []),
+  spendRecoveryCode,
 }));
 
 /* `cache()` holds the answer for the life of a request, and each case here is
@@ -34,6 +38,10 @@ const load = async () => import("@/lib/two-step");
 
 beforeEach(() => {
   listFactors.mockReset();
+  unenroll.mockReset();
+  unenroll.mockResolvedValue({ error: null });
+  markTwoStepOff.mockReset();
+  spendRecoveryCode.mockReset();
   vi.resetModules();
 });
 
@@ -123,5 +131,73 @@ describe("a factor list that was read", () => {
     listFactors.mockResolvedValue({ data: { all: [], totp: [] }, error: null });
     const { presentableFactor } = await load();
     expect(await presentableFactor()).toBeNull();
+  });
+});
+
+describe("turning two-step off is all or nothing", () => {
+  /*
+   * This cleared the mirror whatever happened. `held ?? []` is an empty loop
+   * when the list could not be read, so a failed call turned two-step off in
+   * our column and left a verified factor in Supabase: the screen said Off and
+   * the account was still protected by something nobody could see. It is the
+   * same mistake as reading an unreadable list as an empty one, on the writing
+   * side, and it put a real development account into that state.
+   */
+  it("does not clear the mirror when the factors could not be read", async () => {
+    listFactors.mockResolvedValue({ data: null, error: { message: "timeout" } });
+    const { turnOffEverything } = await load();
+
+    expect(await turnOffEverything("u1")).toEqual({ error: "twoStep.error.again" });
+    expect(markTwoStepOff).not.toHaveBeenCalled();
+  });
+
+  it("does not clear the mirror when a factor refuses to come off", async () => {
+    listFactors.mockResolvedValue({
+      data: { all: [{ id: "f1", status: "verified", factor_type: "totp" }], totp: [] },
+      error: null,
+    });
+    unenroll.mockResolvedValue({ error: { message: "nope" } });
+    const { turnOffEverything } = await load();
+
+    expect(await turnOffEverything("u1")).toEqual({ error: "twoStep.error.again" });
+    expect(markTwoStepOff).not.toHaveBeenCalled();
+  });
+
+  it("clears the mirror once every factor is off", async () => {
+    listFactors.mockResolvedValue({
+      data: {
+        all: [
+          { id: "f1", status: "verified", factor_type: "totp" },
+          { id: "f2", status: "verified", factor_type: "webauthn" },
+        ],
+        totp: [],
+      },
+      error: null,
+    });
+    const { turnOffEverything } = await load();
+
+    expect(await turnOffEverything("u1")).toEqual({});
+    expect(unenroll).toHaveBeenCalledTimes(2);
+    expect(markTwoStepOff).toHaveBeenCalledWith("u1");
+  });
+
+  it("spends a recovery code and reports a turn-off that failed", async () => {
+    spendRecoveryCode.mockResolvedValue(true);
+    listFactors.mockResolvedValue({ data: null, error: { message: "timeout" } });
+    const { redeemRecoveryCode } = await load();
+
+    expect(await redeemRecoveryCode("u1", "abcde-fghij"))
+      .toEqual({ error: "twoStep.error.again" });
+    expect(markTwoStepOff).not.toHaveBeenCalled();
+  });
+
+  it("refuses a recovery code that is not theirs without touching the factor", async () => {
+    spendRecoveryCode.mockResolvedValue(false);
+    const { redeemRecoveryCode } = await load();
+
+    expect(await redeemRecoveryCode("u1", "nope"))
+      .toEqual({ error: "twoStep.error.recovery" });
+    expect(unenroll).not.toHaveBeenCalled();
+    expect(markTwoStepOff).not.toHaveBeenCalled();
   });
 });

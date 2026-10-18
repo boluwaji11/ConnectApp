@@ -195,17 +195,43 @@ export async function redeemRecoveryCode(
   code: string,
 ): Promise<{ error?: string }> {
   if (!(await spendRecoveryCode(userId, code))) return { error: "twoStep.error.recovery" };
-  await turnOffEverything(userId);
-  return {};
+
+  /*
+   * The code is spent before the factor is taken off, so a refused one cannot
+   * be tried again at leisure. If the factor will not come off, say so rather
+   * than letting them through: the code is gone but the others still work, and
+   * two-step is still genuinely on.
+   */
+  return turnOffEverything(userId);
 }
 
-/** Takes every factor off, in Supabase and in the mirror. */
-export async function turnOffEverything(userId: string): Promise<void> {
+/**
+ * Takes every factor off, in Supabase and in the mirror, or neither.
+ *
+ * This wrote the mirror whatever happened. `held ?? []` is an empty loop when
+ * the factor list could not be read, so a failed call turned two-step off in
+ * our column and left it on in Supabase: the screen said Off, the account
+ * still held a verified factor, and the next enrolment added a second one
+ * beside it. It is the same mistake as reading an unreadable list as an empty
+ * one, on the writing side.
+ *
+ * So the mirror is cleared only once Supabase has agreed. Leaving it on when
+ * the factor is really gone is the safe direction of the two: the person meets
+ * a code screen, and the recovery codes they were given are the way through.
+ */
+export async function turnOffEverything(userId: string): Promise<{ error?: string }> {
   const supabase = await supabaseServer();
-  for (const one of (await factors()).held ?? []) {
-    await supabase.auth.mfa.unenroll({ factorId: one.id });
+
+  const { held } = await factors();
+  if (held === null) return { error: "twoStep.error.again" };
+
+  for (const one of held) {
+    const { error } = await supabase.auth.mfa.unenroll({ factorId: one.id });
+    if (error) return { error: "twoStep.error.again" };
   }
+
   await markTwoStepOff(userId);
+  return {};
 }
 
 /**

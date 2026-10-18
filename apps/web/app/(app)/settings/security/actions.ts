@@ -129,8 +129,8 @@ export async function stopTwoStep(data: FormData): Promise<PasswordResult> {
     return { error: t("twoStep.error.password") };
   }
 
-  await turnOffEverything(session.userId);
-  return {};
+  const done = await turnOffEverything(session.userId);
+  return done.error ? { error: t(done.error as MessageKey) } : {};
 }
 
 /**
