@@ -15,6 +15,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "seed:users": "tsx scripts/seed-users.ts",
+    "seed:link": "tsx scripts/link-accounts.ts",
     "metrics": "tsx scripts/metrics.ts",
     "approve": "tsx scripts/approve.ts",
     "census": "tsx scripts/census.ts",

@@ -5,11 +5,17 @@
  * made before that was true, or seeded for local review, are linked here: to a
  * record already carrying their address where there is one, and to a new record
  * where there is not.
+ *
+ * An account without one is not a cosmetic gap. The member-facing screens are
+ * reads of a person's own record, so `personForUser` answering null takes My
+ * giving, My groups and My schedule away from them, and My giving sends them
+ * back to the home screen without a word about why.
  */
 import { owner, closeConnections } from "../src/client";
 import { linkOrCreatePerson } from "../src/repo/membership";
 
-async function main() {
+/** Links every account that has no record yet, and says what it did. */
+export async function linkAccounts(say = true): Promise<number> {
   const sql = owner();
 
   const rows = await sql<
@@ -33,17 +39,24 @@ async function main() {
       fullName: row.full_name,
     });
     if (!id) {
-      console.log(`  ${row.slug.padEnd(12)} ${row.email.padEnd(32)} left alone, that address is already claimed`);
+      if (say) console.log(`  ${row.slug.padEnd(12)} ${row.email.padEnd(32)} left alone, that address is already claimed`);
       continue;
     }
+    if (!say) continue;
     const [person] = await sql<{ name: string }[]>`
       select btrim(coalesce(preferred_name, first_name) || ' ' || coalesce(last_name, '')) as name
         from members where id = ${id}`;
     console.log(`  ${row.slug.padEnd(12)} ${row.email.padEnd(32)} ${person!.name}`);
   }
 
-  console.log(`\n${rows.length} accounts linked.`);
+  return rows.length;
+}
+
+/** Run on its own, for a database that drifted before the seed did this. */
+async function main() {
+  const count = await linkAccounts();
+  console.log(`\n${count} accounts linked.`);
   await closeConnections();
 }
 
-void main();
+if (process.argv[1]?.endsWith("link-accounts.ts")) void main();

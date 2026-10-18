@@ -106,6 +106,13 @@ export async function MyGiving({
     };
   });
 
+  /*
+   * R17.4. Every account belongs to a person the church holds a record for,
+   * and this screen is a read of that record, so there is nothing to draw
+   * without one. An account that has lost its link is a defect in whatever
+   * made it rather than a state a member can recover from here, so it goes to
+   * the home screen instead of to an empty page that says nothing.
+   */
   if (!mine) redirect("/home");
 
   /* R13.6. The church's own giving page, read for the funds it offers. */

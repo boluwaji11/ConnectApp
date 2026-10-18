@@ -5,6 +5,7 @@
  */
 import { deleteTenants } from "../src/maintenance";
 import { owner, closeConnections } from "../src/client";
+import { linkAccounts } from "./link-accounts";
 import { encryptNote } from "../src/crypto";
 
 type Hue = "rose" | "amber" | "citron" | "fern" | "teal" | "sky" | "indigo" | "violet";
@@ -205,6 +206,18 @@ async function main() {
 
     console.log(`  ${church.name}: ${church.households.length} households, ${personCount} members, ${church.rooms.length} rooms`);
   }
+
+  /*
+   * R3.x, R17.4. A seeded account is somebody the church holds a record for.
+   *
+   * The grants above make an `app_users` row and a `tenant_members` row and
+   * stop there, which leaves every seeded account with no `members` row to
+   * point at. The member-facing screens are reads of a person's own record, so
+   * all of them came up empty and My giving redirected to the home screen,
+   * which read as the screen being gone.
+   */
+  console.log("\nLinking accounts to their records");
+  await linkAccounts();
 
   const totals = await sql<{ count: string }[]>`select count(*)::text as count from members`;
   console.log(`\nSeeded 2 churches, ${totals[0]?.count ?? "0"} members total.`);
