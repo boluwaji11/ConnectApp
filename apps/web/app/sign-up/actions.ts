@@ -8,12 +8,11 @@ import { t } from "@connectapp/i18n";
 import { supabaseServer } from "@/lib/supabase/server";
 import { explainAuth, authField } from "@/lib/auth-errors";
 import { PASSWORD_LENGTH } from "@/lib/password";
+import { safePath, safeOrigin } from "@/lib/safe-redirect";
 
+/* SEC-008. On a name we answer on. See the note in sign-in's own copy. */
 async function origin() {
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:4488";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
+  return safeOrigin(await headers());
 }
 
 /** R1.8. They have an account. Sign in, and the way back in is on that screen. */
@@ -49,7 +48,7 @@ export async function signUp(
   const firstName = String(data.get("firstName") ?? "").trim().replace(/\s+/g, " ");
   const lastName = String(data.get("lastName") ?? "").trim().replace(/\s+/g, " ");
   const fullName = [firstName, lastName].filter(Boolean).join(" ");
-  const next = String(data.get("next") ?? "") || "/choose-church";
+  const next = safePath(String(data.get("next") ?? "")) ?? "/choose-church";
 
   if (!firstName || !lastName) return fail(t("signUp.error.name"), firstName ? "lastName" : "firstName");
   if (!/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) return fail(t("signUp.error.email"), "email");
@@ -110,7 +109,7 @@ export async function signUp(
  */
 export async function resendSignUp(data: FormData): Promise<{ error?: string }> {
   const email = String(data.get("email") ?? "").trim().toLowerCase();
-  const next = String(data.get("next") ?? "") || "/choose-church";
+  const next = safePath(String(data.get("next") ?? "")) ?? "/choose-church";
   if (!email) return { error: t("signIn.error.noEmail") };
 
   const supabase = await supabaseServer();

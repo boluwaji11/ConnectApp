@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { t } from "@connectapp/i18n";
 import { requireSession } from "@/lib/session";
+import { safeOrigin } from "@/lib/safe-redirect";
 import { supabaseServer } from "@/lib/supabase/server";
 import { explainAuth } from "@/lib/auth-errors";
 
@@ -69,13 +70,12 @@ export async function changeEmail(data: FormData): Promise<PasswordResult> {
 /** R1.8. For somebody who has only ever signed in by email link. */
 export async function emailMeALink(): Promise<PasswordResult> {
   const session = await requireSession();
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:4488";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  /* SEC-008. On a name we answer on, rather than on whatever host reached us. */
+  const site = await safeOrigin(await headers());
 
   const supabase = await supabaseServer();
   const { error } = await supabase.auth.resetPasswordForEmail(session.email, {
-    redirectTo: `${proto}://${host}/reset`,
+    redirectTo: `${site}/reset`,
   });
   return error ? { error: explainAuth(error) } : {};
 }

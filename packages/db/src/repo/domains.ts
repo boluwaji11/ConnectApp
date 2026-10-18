@@ -265,7 +265,7 @@ export async function setSiteBuilder(
 
 /* The rules themselves, for everything that reads them from here. */
 export {
-  cleanDomain, slugUnderPlatform, cleanPortalName, isReservedName,
+  cleanDomain, slugUnderPlatform, cleanPortalName, isReservedName, isPlatformHost,
 } from "./portal-rules";
 
 /**

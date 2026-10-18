@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { t } from "@connectapp/i18n";
+import { ourOrigin, safePath } from "@/lib/safe-redirect";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,7 +19,7 @@ export const runtime = "nodejs";
  * Nothing here is a control. The token is Supabase's to accept or refuse, and
  * this hands it over untouched.
  */
-export function GET(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const asked = new URL(request.url);
   const token = asked.searchParams.get("token");
   const type = asked.searchParams.get("type");
@@ -38,8 +39,26 @@ export function GET(request: NextRequest) {
    * Where Supabase sends them once the token is proved. Our own callback,
    * which is the only thing that knows what to do with what comes back, and
    * ours rather than the church's because the session cookie is set there.
+   *
+   * SEC-008. Clamped to an address we answer on. Supabase appends the proof of
+   * identity to whatever this names once it has spent the token, so an
+   * unchecked `redirect_to` carries a live credential wherever it points, and
+   * this value is reachable through the authentication API: a `redirect_to`
+   * asked for there arrives in the hook, goes into the link a church is
+   * emailed, and comes back here. The portal's own copy of this route has
+   * clamped it from the start, for the same reason.
    */
-  const back = asked.searchParams.get("redirect_to") || `${home}/auth/callback`;
+  const given = asked.searchParams.get("redirect_to");
+  const fallback = `${home}/auth/callback`;
+  const back = await (async () => {
+    if (!given) return fallback;
+    const path = safePath(given);
+    if (path) return `${home}${path}`;
+    const origin = await ourOrigin(given);
+    if (!origin) return fallback;
+    const url = new URL(given);
+    return `${origin}${url.pathname}${url.search}`;
+  })();
 
   const query = new URLSearchParams({ token, type, redirect_to: back });
   return NextResponse.redirect(`${project.replace(/\/$/, "")}/auth/v1/verify?${query.toString()}`);

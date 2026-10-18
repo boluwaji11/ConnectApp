@@ -85,7 +85,20 @@ function confirmUrl(hook: Hook): string | null {
   const site = HOME.replace(/\/$/, "");
   if (!site) return null;
 
-  const back = hook.email_data.redirect_to || `${site}/auth/callback`;
+  /*
+   * SEC-008. Clamped before it goes into the link, not only used to pick the
+   * host the link points at.
+   *
+   * `atHost` below already refused a foreign origin when deciding which of our
+   * two sites proves the token. The value itself was then passed through
+   * untouched, so the emailed link carried `redirect_to=<anything>` onward to
+   * Supabase, and Supabase appends the identity to it. Only Supabase's own
+   * allowlist stood between a crafted `redirect_to` and a live credential
+   * leaving the building, and that allowlist is configuration this repository
+   * does not hold.
+   */
+  const asked = hook.email_data.redirect_to;
+  const back = asked && atHost(asked) ? asked : `${site}/auth/callback`;
 
   /*
    * HRT-401. A link into the admin portal is proved on the portal's own

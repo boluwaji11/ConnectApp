@@ -4,6 +4,7 @@ import { syncUserAndAcceptInvitations } from "@connectapp/db";
 import { supabaseServer } from "@/lib/supabase/server";
 import { explainAuth } from "@/lib/auth-errors";
 import { landingFor } from "@/lib/landing";
+import { safeDestination } from "@/lib/safe-redirect";
 
 /**
  * Where an email link lands. Handles both shapes Supabase sends: a PKCE `code`,
@@ -45,8 +46,17 @@ export async function GET(request: NextRequest) {
   // R24.x. Their own palette, brought onto this device.
   await adoptTheme(user.id);
 
-  /* R17.1. Where they land may be the church's own address, which already
-     carries its own origin. Only a path needs ours put in front of it. */
-  const to = next || (await landingFor(user.id));
+  /*
+   * R17.1. Where they land may be the church's own address, which already
+   * carries its own origin. Only a path needs ours put in front of it.
+   *
+   * SEC-008. The absolute branch used to take whatever it was given, so
+   * `?next=https://evil.example` was an off-site redirect from our own origin
+   * immediately after the session cookie was set, which is the landing a
+   * phished sign-in wants. An absolute address now has to be one of our names
+   * or a domain a church has actually set.
+   */
+  const asked = await safeDestination(next);
+  const to = asked ?? (await landingFor(user.id));
   return NextResponse.redirect(to.startsWith("/") ? `${origin}${to}` : to);
 }

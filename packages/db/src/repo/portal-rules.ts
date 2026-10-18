@@ -127,22 +127,59 @@ export const isReservedName = (name: string): boolean =>
  *
  * A custom domain is a name a church owns and points here. Our own names are
  * not that, and a church must never be able to claim one: `resolveTenantByHost`
- * answers the custom domain lookup for any host that is not a single label
- * under the platform, so a church holding `connectapp.church` becomes the
- * church every request on the front door resolves to, and every member of every
- * other church is refused at the door. The same goes for the names the
- * deployment itself answers on, which sit under the platform host but are
+ * answers the custom domain lookup for any host that is not a single
+ * unreserved label under the platform, so a church holding `connectapp.church`
+ * becomes the church every request on the front door resolves to, and every
+ * member of every other church is refused at it. The same goes for the names
+ * the deployment itself answers on, which sit under the platform host but are
  * reserved rather than a church's slug.
+ *
+ * Every name this deployment knows itself by, not only `PLATFORM_HOST`. That
+ * variable is `localhost` in development while the deployment also answers on
+ * `dev.connectapp.church`, so a list of one would have left the deployed names
+ * claimable in exactly the environment where somebody is trying things out.
  *
  * Checked on the way in, where a church sets the name, and again on the way
  * out, where a host is resolved, so a row written before this existed cannot
  * take the platform down either.
  */
-export function isPlatformHost(host: string, platform = platformHost()): boolean {
-  const bare = cleanDomain(host);
+/** A host as it compares: lower case, no scheme, no port, no path. */
+function bareHost(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/[/?#].*$/, "")
+    .replace(/:\d+$/, "")
+    .replace(/\.$/, "");
+}
+
+export function isPlatformHost(host: string, platform?: string): boolean {
+  const bare = bareHost(host);
   if (!bare) return false;
-  for (const root of [platform, "localhost"]) {
-    if (!root) continue;
+
+  /*
+   * `localhost` is always ours, with or without an override, and it is read
+   * without `cleanDomain` because that asks for a dot and `localhost` has
+   * none. A church claiming `riverside.localhost` would take a developer's
+   * own address, which costs nothing to refuse.
+   */
+  const roots = new Set<string>(["localhost"]);
+  const named = platform
+    ? [platform]
+    : [
+        platformHost(),
+        process.env["PLATFORM_SITE"],
+        process.env["PLATFORM_ADMIN_SITE"],
+        process.env["NEXT_PUBLIC_DEMO_HOST"],
+      ];
+
+  for (const one of named) {
+    const root = one ? bareHost(one) : "";
+    if (root) roots.add(root);
+  }
+
+  for (const root of roots) {
     if (bare === root || bare.endsWith(`.${root}`)) return true;
   }
   return false;

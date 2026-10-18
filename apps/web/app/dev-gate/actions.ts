@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { platform } from "@connectapp/db";
 import { supabaseServer } from "@/lib/supabase/server";
 import { DEV_PASS, gated, mintPass } from "@/lib/dev-gate";
+import { safePath } from "@/lib/safe-redirect";
 
 /**
  * HRT-402, R21.x. Reading the team list, which middleware cannot do, and
@@ -15,7 +16,11 @@ import { DEV_PASS, gated, mintPass } from "@/lib/dev-gate";
  * the database on every request for a page that only the team can see anyway.
  */
 export async function letMeIn(next: string): Promise<{ error?: string }> {
-  if (!gated()) redirect(next || "/");
+  /* SEC-008. Checked on both ways out of this function. The line below the
+     gate has always checked it; this one took whatever it was handed. */
+  const back = safePath(next) ?? "/";
+
+  if (!gated()) redirect(back);
 
   const supabase = await supabaseServer();
   const { data } = await supabase.auth.getUser();
@@ -37,5 +42,5 @@ export async function letMeIn(next: string): Promise<{ error?: string }> {
     maxAge: 12 * 60 * 60,
   });
 
-  redirect(next && next.startsWith("/") ? next : "/");
+  redirect(back);
 }

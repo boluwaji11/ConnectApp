@@ -7,10 +7,10 @@
  * church's address.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { withTenant, closeConnections, type Tx } from "../src/client";
+import { withTenant, closeConnections, owner, type Tx } from "../src/client";
 import {
   slugUnderPlatform, cleanPortalName, isReservedName, portalNameFree, setPortalName,
-  setPortalOpen, resolveTenantByHost,
+  setPortalOpen, resolveTenantByHost, setCustomDomain, isPlatformHost, forgetHosts,
 } from "../src/repo/domains";
 import { PermissionError, type TenantRole } from "../src/roles";
 import { InvalidInputError, NameTakenError } from "../src/errors";
@@ -237,5 +237,94 @@ describe("turning the address off", () => {
     await expect(
       run(one, (tx) => setPortalOpen(tx, as(one, "staff"), false), "staff"),
     ).rejects.toBeInstanceOf(PermissionError);
+  });
+});
+
+/**
+ * SEC-009. A custom domain is a name the church owns, not one of ours.
+ *
+ * `resolveTenantByHost` tries the platform branch first, which answers only for
+ * a single unreserved label under our own domain, and then falls through to a
+ * lookup on `custom_domain`. Everything the first branch refused therefore
+ * reached the second: the apex itself, `www`, and every name on the reserved
+ * list, which exists precisely to stop a church answering as `give` or
+ * `security` or `support` under our name.
+ *
+ * Taking the apex is the worst of them. `requireSession` lets the host decide
+ * which church a request belongs to, so one church holding `connectapp.church`
+ * makes the front door resolve to it and refuses every member of every other
+ * church at it. One administrator, self-service, no approval.
+ *
+ * Checked on the way in and again on the way out, so a row written before the
+ * check existed cannot do it either.
+ */
+describe("a name of ours is not a church's to take", () => {
+  const OURS = "connectapp.church";
+
+  it("knows its own names", () => {
+    for (const mine of [
+      "connectapp.church",
+      "www.connectapp.church",
+      "give.connectapp.church",
+      "admin.connectapp.church",
+      "anything.connectapp.church",
+      "localhost",
+      "riverside.localhost",
+    ]) {
+      expect(isPlatformHost(mine, OURS), mine).toBe(true);
+    }
+  });
+
+  it("leaves a church's own name alone", () => {
+    for (const theirs of [
+      "gracechurch.org",
+      "www.gracechurch.org",
+      "connectapp.church.example.org",
+      "notconnectapp.church",
+    ]) {
+      expect(isPlatformHost(theirs, OURS), theirs).toBe(false);
+    }
+  });
+
+  /*
+   * `localhost` and everything under it are ours in every configuration, so
+   * the two cases that reach the database use those. Reading PLATFORM_HOST
+   * here instead would be reading it before `loadEnv` has run, which is how
+   * an earlier version of this test compared against the wrong name.
+   */
+  it("refuses to write one as a custom domain", async () => {
+    for (const mine of ["localhost", "www.localhost", "give.localhost"]) {
+      await expect(
+        run(one, (tx) => setCustomDomain(tx, as(one), { domain: mine })),
+        mine,
+      ).rejects.toThrow(InvalidInputError);
+    }
+  });
+
+  it("still takes a domain the church owns", async () => {
+    const theirs = "portalone-example.org";
+    const written = await run(one, (tx) => setCustomDomain(tx, as(one), { domain: theirs }));
+    expect(written).toBe(theirs);
+    expect(await resolveTenantByHost(theirs)).not.toBeNull();
+
+    await run(one, (tx) => setCustomDomain(tx, as(one), { domain: null }));
+  });
+
+  it("never resolves one of ours out of custom_domain, whatever the row says", async () => {
+    /* Written underneath the check, the way a row already in the database
+       would have been, so the read side is tested on its own. */
+    /*
+     * A reserved label under our own name. `slugUnderPlatform` refuses it, so
+     * it is exactly the host that fell through to the custom domain lookup,
+     * which is the fall-through this guard exists to close. A name the
+     * platform branch would have answered for proves nothing here.
+     */
+    await owner()`update tenants set custom_domain = 'give.localhost' where id = ${one}`;
+    forgetHosts();
+
+    expect(await resolveTenantByHost("give.localhost")).toBeNull();
+
+    await owner()`update tenants set custom_domain = null where id = ${one}`;
+    forgetHosts();
   });
 });
