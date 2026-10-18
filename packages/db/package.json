@@ -25,7 +25,8 @@
     "seed:member": "tsx scripts/seed-member.ts",
     "seed:staff": "tsx scripts/seed-staff.ts",
     "seed:notifications": "tsx scripts/seed-notifications.ts",
-    "seed:report": "tsx scripts/seed-report.ts"
+    "seed:report": "tsx scripts/seed-report.ts",
+    "demo:template": "tsx scripts/demo-template.ts"
   },
   "dependencies": {
     "@connectapp/env": "workspace:*",

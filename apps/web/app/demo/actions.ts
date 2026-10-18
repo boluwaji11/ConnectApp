@@ -1,8 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { after } from "next/server";
-import { createDemoChurch, topUpDemoPool } from "@connectapp/db";
+import { createDemoChurch } from "@connectapp/db";
 import { issueDemoPass, newDemoUserId } from "@/lib/demo-pass";
 
 /**
@@ -15,22 +14,13 @@ import { issueDemoPass, newDemoUserId } from "@/lib/demo-pass";
  * and thrown away tomorrow, and a signed cookie naming it. Nothing they press
  * can reach a real church: the cookie is signed, and the session layer refuses
  * any church without a demo expiry in the future.
+ *
+ * It is a copy of a template rather than a church built on the spot, which is
+ * what makes this about half a second rather than thirty-eight.
  */
 export async function startDemo() {
   const userId = newDemoUserId();
   const demo = await createDemoChurch(userId);
   await issueDemoPass(demo.tenantId, userId, demo.expiresAt);
-
-  // Building the replacement happens after this response, so the wait lands on
-  // nobody. A visitor who presses the button gets a church that was ready.
-  after(async () => {
-    try {
-      await topUpDemoPool();
-    } catch {
-      // The next visitor builds their own, slowly, which is the old behaviour
-      // rather than a failure.
-    }
-  });
-
   redirect("/dashboard");
 }

@@ -5,12 +5,11 @@
  * real church's directory. The tests that matter are the ones proving the demo
  * is a separate church, and that it goes away.
  */
-import { describe, it, expect, afterAll, beforeAll } from "vitest";
+import { describe, it, expect, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { owner, withTenant, closeConnections } from "../src/client";
 import {
-  createDemoChurch, demoChurchInfo, sweepExpiredDemos, topUpDemoPool,
-  demoMembership, DEMO_LIFETIME_HOURS,
+  createDemoChurch, demoChurchInfo, sweepExpiredDemos, rebuildDemoTemplate,
 } from "../src/demo/church";
 import { DEMO_PEOPLE } from "../src/demo/members";
 import { listPeople } from "../src/repo/members";
@@ -41,25 +40,17 @@ afterAll(async () => {
  */
 describe("a demo church's standing", () => {
   it("is approved, so none of the provisional limits apply", async () => {
-    /* Anything already waiting was built by whatever code was here before, so
-       the pool is emptied and one is built against the code under test. */
-    await withAuditTriggersOff(async (sql) => {
-      await sql`delete from tenants
-                 where demo_expires_at is not null and demo_claimed_at is null`;
-    });
-    await topUpDemoPool(1);
+    /* Built against the code under test rather than whatever was here before. */
+    const templateId = await rebuildDemoTemplate();
     const [waiting] = await owner()<{ id: string; approved_at: Date | null }[]>`
-      select id, approved_at from tenants
-       where demo_expires_at is not null and demo_claimed_at is null
-       order by created_at desc limit 1`;
+      select id, approved_at from tenants where id = ${templateId}`;
 
-    expect(waiting, "the pool built nothing to check").toBeTruthy();
-    made.push(waiting!.id);
+    expect(waiting, "no template was built to check").toBeTruthy();
     expect(waiting!.approved_at).toBeInstanceOf(Date);
 
     const standing = await withTenant(
-      { tenantId: waiting!.id, role: "owner" },
-      (db) => churchStanding(db, waiting!.id),
+      { tenantId: templateId, role: "owner" },
+      (db) => churchStanding(db, templateId),
     );
     expect(standing.approved).toBe(true);
     /* Null remaining is what an approved church reports: nothing left to use
@@ -198,92 +189,9 @@ describe.skip("a demo pass", () => {
  * church a visitor gets, and building real ones would put a quarter of an hour
  * on the suite.
  */
-describe.skip("the pool", () => {
-  const WEEK = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-
-  // Deleting a tenant cascades, and the audit trigger would write rows
-  // pointing at the tenant being deleted, which is what this switch is for.
-  const clearPool = () =>
-    withAuditTriggersOff(async (sql) => {
-      await sql`
-        delete from tenants
-         where demo_expires_at is not null and demo_claimed_at is null`;
-    });
-
-  const unclaimed = async (): Promise<number> => {
-    const [row] = await owner()<{ n: string }[]>`
-      select count(*)::text as n from tenants
-       where demo_expires_at is not null and demo_claimed_at is null`;
-    return Number(row!.n);
-  };
-
-  /** A church waiting in the pool, without the cost of filling it. */
-  const waiting = async (slug: string): Promise<string> => {
-    const [row] = await owner()<{ id: string }[]>`
-      insert into tenants (slug, name, timezone, demo_expires_at)
-      values (${slug}, 'Fairview Church', 'America/Chicago', ${WEEK()})
-      returning id`;
-    return row!.id;
-  };
-
-  beforeAll(clearPool);
-  afterAll(clearPool);
-
-  it("gives the visitor the church that was waiting, and starts its clock", async () => {
-    const id = await waiting("demo-pool-1");
-    const userId = randomUUID();
-
-    const demo = await createDemoChurch(userId);
-    made.push(demo.tenantId);
-
-    expect(demo.tenantId).toBe(id);
-    expect(await unclaimed()).toBe(0);
-    expect(await demoMembership(demo.tenantId, userId)).not.toBeNull();
-
-    // The day starts when it is taken rather than when it was built.
-    const hours = (demo.expiresAt.getTime() - Date.now()) / 3_600_000;
-    expect(hours).toBeGreaterThan(DEMO_LIFETIME_HOURS - 1);
-    expect(hours).toBeLessThanOrEqual(DEMO_LIFETIME_HOURS);
-  }, 120_000);
-
-  it("gives two visitors two different churches", async () => {
-    await waiting("demo-pool-2");
-    await waiting("demo-pool-3");
-
-    const first = await createDemoChurch(randomUUID());
-    const second = await createDemoChurch(randomUUID());
-    made.push(first.tenantId, second.tenantId);
-
-    expect(first.tenantId).not.toBe(second.tenantId);
-    expect(await unclaimed()).toBe(0);
-  }, 120_000);
-
-  it("builds what is missing, stops at the number asked for, and fills it", async () => {
-    await clearPool();
-
-    expect(await topUpDemoPool(1)).toBe(1);
-    expect(await unclaimed()).toBe(1);
-
-    expect(await topUpDemoPool(1)).toBe(0);
-    expect(await unclaimed()).toBe(1);
-
-    const [row] = await owner()<{ n: string }[]>`
-      select count(*)::text as n from members
-       where tenant_id = (
-         select id from tenants
-          where demo_expires_at is not null and demo_claimed_at is null
-          limit 1
-       )`;
-    expect(Number(row!.n)).toBe(DEMO_PEOPLE.length);
-  }, 180_000);
-
-  it("leaves the audit triggers alone when there is nothing expired", async () => {
-    await clearPool();
-    await waiting("demo-pool-4");
-
-    // Taking the triggers off locks every audited table, so the sweep asks
-    // first. The answer here is that there is nothing to sweep.
-    expect(await sweepExpiredDemos()).toBe(0);
-    expect(await unclaimed()).toBe(1);
-  });
-});
+/**
+ * The pool is gone. A copy of the template takes about half a second, so there
+ * is nothing to keep warm: the suite that proved churches were built in
+ * advance was proving a mechanism that no longer exists. What replaced it is
+ * covered by `clone.test.ts`, which proves a copy holds what it came from.
+ */

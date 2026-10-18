@@ -1,6 +1,7 @@
 import { owner, withTenant } from "../client";
 import { withAuditTriggersOff } from "../maintenance";
 import { loadDemoData } from "./load";
+import { cloneTenant } from "./clone";
 
 /**
  * R19.7 and R22.1. A demo church, belonging to nobody.
@@ -16,17 +17,8 @@ import { loadDemoData } from "./load";
 /** Long enough to look around twice, short enough that nobody settles in. */
 export const DEMO_LIFETIME_HOURS = 24;
 
-/**
- * How many demo churches wait, built and unclaimed.
- *
- * Building one takes long enough that a visitor watching a blank page decides
- * against us before it finishes. So they are built in advance and handed over,
- * and the pool is topped up after the visitor has already gone in.
- */
-export const DEMO_POOL_TARGET = 2;
-
-/** How long an unclaimed church waits before the sweep takes it. */
-const POOL_LIFETIME_HOURS = 24 * 7;
+/** The church every demo is copied from. Never opened, never swept. */
+export const TEMPLATE_SLUG = "demo-template";
 
 export interface DemoChurch {
   tenantId: string;
@@ -47,8 +39,10 @@ const DEMO_NAME = "Fairview Church";
  * anonymous by design. The Owner role granted here is over a church that holds
  * only invented members and is removed the next day.
  */
-async function buildDemoChurch(): Promise<{ tenantId: string; slug: string }> {
-  const slug = `demo-${suffix()}`;
+async function buildDemoChurch(
+  how: { slug?: string; template?: boolean } = {},
+): Promise<{ tenantId: string; slug: string }> {
+  const slug = how.slug ?? `demo-${suffix()}`;
   const sql = owner();
 
   /*
@@ -69,7 +63,7 @@ async function buildDemoChurch(): Promise<{ tenantId: string; slug: string }> {
     insert into tenants (slug, name, timezone, demo_expires_at, approved_at, approved_by)
     values (
       ${slug}, ${DEMO_NAME}, 'America/Chicago',
-      ${new Date(Date.now() + POOL_LIFETIME_HOURS * 60 * 60 * 1000)},
+      ${how.template ? null : new Date(Date.now() + DEMO_LIFETIME_HOURS * 60 * 60 * 1000)},
       now(), 'demo'
     )
     returning id`;
@@ -100,78 +94,63 @@ async function buildDemoChurch(): Promise<{ tenantId: string; slug: string }> {
 export async function createDemoChurch(userId: string): Promise<DemoChurch> {
   await sweepExpiredDemos();
 
+  const template = await ensureDemoTemplate();
   const expiresAt = new Date(Date.now() + DEMO_LIFETIME_HOURS * 60 * 60 * 1000);
-  const sql = owner();
+  const slug = `demo-${suffix()}`;
 
-  const taken = await sql.begin(async (tx) => {
-    const [waiting] = await tx<{ id: string; slug: string }[]>`
-      select id, slug from tenants
-       where demo_expires_at is not null
-         and demo_claimed_at is null
-       order by created_at
-       limit 1
-         for update skip locked`;
-    if (!waiting) return null;
-
-    await tx`
-      update tenants
-         set demo_claimed_at = now(), demo_expires_at = ${expiresAt}
-       where id = ${waiting.id}`;
-
-    await tx`
-      insert into app_users (id, email, full_name)
-      values (${userId}, ${`${waiting.slug}@demo.invalid`}, 'Demo visitor')
-      on conflict (id) do nothing`;
-
-    await tx`
-      insert into tenant_members (tenant_id, user_id, role)
-      values (${waiting.id}, ${userId}, 'owner')`;
-
-    return waiting;
-  }) as { id: string; slug: string } | null;
-
-  if (taken) {
-    return { tenantId: taken.id, slug: taken.slug, name: DEMO_NAME, expiresAt };
-  }
-
-  const built = await buildDemoChurch();
-  await sql.begin(async (tx) => {
-    await tx`
-      update tenants
-         set demo_claimed_at = now(), demo_expires_at = ${expiresAt}
-       where id = ${built.tenantId}`;
-
-    await tx`
-      insert into app_users (id, email, full_name)
-      values (${userId}, ${`${built.slug}@demo.invalid`}, 'Demo visitor')
-      on conflict (id) do nothing`;
-
-    await tx`
-      insert into tenant_members (tenant_id, user_id, role)
-      values (${built.tenantId}, ${userId}, 'owner')`;
+  const tenantId = await cloneTenant(template, {
+    slug,
+    name: DEMO_NAME,
+    demoExpiresAt: expiresAt,
   });
 
-  return { tenantId: built.tenantId, slug: built.slug, name: DEMO_NAME, expiresAt };
+  await owner().begin(async (tx) => {
+    await tx`
+      update tenants set demo_claimed_at = now() where id = ${tenantId}`;
+
+    await tx`
+      insert into app_users (id, email, full_name)
+      values (${userId}, ${`${slug}@demo.invalid`}, 'Demo visitor')
+      on conflict (id) do nothing`;
+
+    /* The visitor is the only member the copy ever has: `tenant_members` is
+       one of the three things a copy deliberately leaves behind. */
+    await tx`
+      insert into tenant_members (tenant_id, user_id, role)
+      values (${tenantId}, ${userId}, 'owner')`;
+  });
+
+  return { tenantId, slug, name: DEMO_NAME, expiresAt };
 }
 
 /**
- * Builds churches until the pool is full again.
+ * The church every demo is a copy of, built once.
  *
- * Called after a visitor has already been let in, so the cost lands on nobody.
- * Building one at a time rather than all at once, because the point is to be
- * ready for the next visitor and not to hold the connection.
+ * Built by the loader, slowly and through the same repo functions the product
+ * uses, so what a visitor is shown cannot drift into something the product
+ * does not do. It is never opened: it carries no expiry, so the session layer
+ * refuses it the way it refuses any church that is not a demo, and the sweep
+ * leaves it alone for the same reason.
+ *
+ * `pnpm demo:template` builds it at deploy time. Building it here as well is
+ * the net under that: an environment where nobody ran the script makes one
+ * visitor wait rather than showing them nothing.
  */
-export async function topUpDemoPool(target = DEMO_POOL_TARGET): Promise<number> {
-  const [row] = await owner()<{ n: string }[]>`
-    select count(*) as n from tenants
-     where demo_expires_at is not null and demo_claimed_at is null`;
+export async function ensureDemoTemplate(): Promise<string> {
+  const [held] = await owner()<{ id: string }[]>`
+    select id from tenants where slug = ${TEMPLATE_SLUG}`;
+  if (held) return held.id;
 
-  let built = 0;
-  for (let waiting = Number(row?.n ?? 0); waiting < target; waiting += 1) {
-    await buildDemoChurch();
-    built += 1;
-  }
-  return built;
+  const built = await buildDemoChurch({ slug: TEMPLATE_SLUG, template: true });
+  return built.tenantId;
+}
+
+/** Builds the template again from nothing, for when the seed has changed. */
+export async function rebuildDemoTemplate(): Promise<string> {
+  await withAuditTriggersOff(async (sql) => {
+    await sql`delete from tenants where slug = ${TEMPLATE_SLUG}`;
+  });
+  return ensureDemoTemplate();
 }
 
 export interface DemoInfo {
