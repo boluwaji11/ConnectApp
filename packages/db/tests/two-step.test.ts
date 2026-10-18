@@ -49,12 +49,13 @@ afterAll(async () => {
 
 describe("the mirror of what Supabase holds", () => {
   it("starts off, with nothing to recover with", async () => {
-    expect(await twoStepFor(PERSON)).toEqual({ enrolledAt: null, codesLeft: 0 });
+    expect(await twoStepFor(PERSON)).toMatchObject({ enrolledAt: null, codesLeft: 0 });
   });
 
   it("answers a user it has never seen rather than throwing", async () => {
     const nobody = "dddddddd-9999-4999-8999-999999999999";
-    expect(await twoStepFor(nobody)).toEqual({ enrolledAt: null, codesLeft: 0 });
+    expect(await twoStepFor(nobody))
+      .toEqual({ enrolledAt: null, codesLeft: 0, accountMadeAt: null });
   });
 
   it("goes on, and comes back off", async () => {
@@ -141,7 +142,7 @@ describe("recovery codes", () => {
     await markTwoStepOn(PERSON);
 
     await markTwoStepOff(PERSON);
-    expect(await twoStepFor(PERSON)).toEqual({ enrolledAt: null, codesLeft: 0 });
+    expect(await twoStepFor(PERSON)).toMatchObject({ enrolledAt: null, codesLeft: 0 });
   });
 });
 

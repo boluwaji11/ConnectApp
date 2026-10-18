@@ -23,6 +23,7 @@
     "**/*.tsx",
     ".next-ci/types/**/*.ts",
     ".next-dev-verify/types/**/*.ts",
+    ".next-perf/types/**/*.ts",
     ".next-sec/types/**/*.ts",
     ".next-sec2/types/**/*.ts",
     ".next-sec3/types/**/*.ts",
@@ -30,7 +31,7 @@
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-perf/types/**/*.ts"
+    ".next-ci2/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

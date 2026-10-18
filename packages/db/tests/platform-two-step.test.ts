@@ -112,7 +112,7 @@ describe("turning it off", () => {
 
     await platform.clearTwoStep(OPERATOR, LOCKED, "called about a lost phone");
 
-    expect(await twoStepFor(LOCKED)).toEqual({ enrolledAt: null, codesLeft: 0 });
+    expect(await twoStepFor(LOCKED)).toMatchObject({ enrolledAt: null, codesLeft: 0 });
     expect(await factorsFor(LOCKED)).toBe(0);
   });
 
