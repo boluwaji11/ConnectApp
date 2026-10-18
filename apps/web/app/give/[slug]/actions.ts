@@ -1,6 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
+import { withinLimit } from "@/lib/rate-limit";
 import {
   givingPage, giverKnown, giverMember, giverCustomer, rememberCustomer,
 } from "@connectapp/db";
@@ -88,6 +89,20 @@ export async function startGift(input: {
   inside?: boolean;
 }): Promise<GiveResult> {
   if (!stripeConfigured()) return { error: "stripe.unconfigured" };
+
+  /*
+   * SEC-026. This is the expensive unauthenticated path.
+   *
+   * Every call creates a Stripe Checkout Session on the church's own connected
+   * account, and for an address the church already holds it creates or reuses a
+   * Stripe Customer there too. Unlimited, that is both a bill somebody else
+   * pays and a way to spend the church's own Stripe rate limit until its giving
+   * page stops answering. Keyed on the church as well as the caller, so one
+   * church's giving page cannot be used to shut another's.
+   */
+  const allowance = await withinLimit("give", 12, "10 m", input.slug);
+  if (allowance === "over") return { error: "give.error.tooMany" };
+  if (allowance === "unavailable") return { error: "give.error.unavailable" };
 
   const page = await givingPage(input.slug);
   if (!page) return { error: "give.error.closed" };

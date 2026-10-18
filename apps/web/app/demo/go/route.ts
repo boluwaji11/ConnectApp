@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createDemoChurch } from "@connectapp/db";
 import { issueDemoPass, newDemoUserId } from "@/lib/demo-pass";
 import { backTo, isDemoHost } from "@/lib/demo-host";
+import { withinLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,6 +35,23 @@ export async function GET(request: NextRequest) {
    * on a demo.
    */
   const next = asked && asked.startsWith("/") && !asked.startsWith("//") ? asked : "/dashboard";
+
+  /*
+   * SEC-026. A church is copied here, which is the most expensive thing an
+   * unauthenticated request can ask this product to do.
+   *
+   * Every call writes a whole tenant: every table, every row, a few hundred of
+   * them. Nothing is at stake in any one of them, which the note above is
+   * right about, but nothing stopped somebody asking for ten thousand either,
+   * and the sweep that clears them runs on a schedule rather than ahead of the
+   * next request. Generous, because arriving at a demo and being turned away is
+   * the one thing this address must not do, and a refusal here still shows the
+   * product's own front page rather than an error.
+   */
+  const allowance = await withinLimit("demo", 20, "10 m");
+  if (allowance !== "ok") {
+    return NextResponse.redirect(backTo(request.headers, "/?demo=busy"));
+  }
 
   const userId = newDemoUserId();
   const demo = await createDemoChurch(userId);

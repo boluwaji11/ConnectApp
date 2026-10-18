@@ -5,7 +5,7 @@
  * marked "use client" actually name. Run `pnpm catalogue` after changing a
  * screen's words; CI fails if this file is stale.
  *
- * 3912 of 5542 keys.
+ * 3914 of 5546 keys.
  */
 import type { Catalogue } from "../core";
 
@@ -1684,6 +1684,8 @@ export const browserWords: Catalogue = {
   "give.closed.body": "Ask the church office how to give.",
   "give.failed": "Couldn't complete your gift",
   "give.error.closed": "This church isn't taking gifts online yet.",
+  "give.error.tooMany": "Too many tries just now. Wait a few minutes and start again.",
+  "give.error.unavailable": "Giving can't be set up right now. Try again shortly.",
   "give.error.fund": "Choose what the gift is for.",
   "give.error.amount": "Enter an amount.",
   "give.error.tooSmall": "The smallest gift this church can take online is {least}.",

@@ -1,5 +1,8 @@
 "use server";
 
+import { withinLimit } from "@/lib/rate-limit";
+import { t } from "@connectapp/i18n";
+
 import { submitPublicForm } from "@connectapp/db";
 import type { FormAnswer } from "@connectapp/db/rules";
 import { explain } from "@/lib/explain";
@@ -21,6 +24,15 @@ export async function sendForm(input: {
   eventSlug?: string | null;
 }): Promise<{ ok: boolean; errors?: Record<string, string>; error?: string }> {
   if (input.trap.trim() !== "") return { ok: true };
+
+  /*
+   * SEC-026. The honeypot above is a field a direct caller leaves out, so it
+   * stops a crawler and nothing else. This writes rows and can create a person
+   * record, and it was unlimited.
+   */
+  const allowance = await withinLimit("form-send", 10, "10 m", input.churchSlug);
+  if (allowance === "over") return { ok: false, error: t("publicForm.tooMany") };
+  if (allowance === "unavailable") return { ok: false, error: t("publicForm.unavailable") };
 
   try {
     const result = await submitPublicForm({

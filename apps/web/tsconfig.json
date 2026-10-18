@@ -24,10 +24,11 @@
     ".next-ci/types/**/*.ts",
     ".next-dev-verify/types/**/*.ts",
     ".next-sec/types/**/*.ts",
+    ".next-sec2/types/**/*.ts",
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-sec2/types/**/*.ts"
+    ".next-sec3/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
