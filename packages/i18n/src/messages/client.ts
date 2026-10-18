@@ -5,7 +5,7 @@
  * marked "use client" actually name. Run `pnpm catalogue` after changing a
  * screen's words; CI fails if this file is stale.
  *
- * 3982 of 5648 keys.
+ * 3982 of 5653 keys.
  */
 import type { Catalogue } from "../core";
 

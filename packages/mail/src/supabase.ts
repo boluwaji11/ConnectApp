@@ -51,6 +51,24 @@ export const verifyMarkup = (link: string = SUPABASE_LINK): string =>
     ignore: t("mail.verify.ignore"),
   });
 
+/**
+ * "Change email address".
+ *
+ * Its own words rather than the signup's. Supabase calls this
+ * `email_change` and it used to fall through to the branch below, so
+ * somebody who had been running their church for a month and changed their
+ * address was told "Thanks for signing up" and asked to confirm so they
+ * could "get started setting up your church".
+ */
+export const emailChangeMarkup = (link: string = SUPABASE_LINK): string =>
+  message({
+    link,
+    headline: t("mail.emailChange.headline"),
+    says: [t("mail.emailChange.opening")],
+    press: t("mail.emailChange.button"),
+    ignore: t("mail.emailChange.ignore"),
+  });
+
 /** "Reset password". */
 export const resetMarkup = (link: string = SUPABASE_LINK): string =>
   message({
@@ -107,6 +125,19 @@ export function authMessage(
         t("mail.reset.ignore"),
       ),
       html: resetMarkup(link),
+    };
+  }
+
+  if (action === "email_change") {
+    return {
+      subject: t("mail.emailChange.subject"),
+      text: plain(
+        t("mail.emailChange.headline"),
+        [t("mail.emailChange.opening")],
+        t("mail.emailChange.button"),
+        t("mail.emailChange.ignore"),
+      ),
+      html: emailChangeMarkup(link),
     };
   }
 
