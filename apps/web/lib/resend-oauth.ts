@@ -56,9 +56,30 @@ export interface Handshake {
   from: string;
   name: string;
   verifier: string;
+  /**
+   * SEC-014. The hash of a nonce left in a cookie on the browser that started
+   * this, so the handshake is bound to that browser and not merely unguessable.
+   *
+   * Sealed, so it cannot be swapped, and stored as a hash so the sealed state
+   * is not itself the secret. Optional only so a handshake minted by the
+   * version before this one is refused rather than crashing.
+   */
+  nonce?: string;
   /** Seconds since the epoch, after which this is refused. */
   until: number;
 }
+
+/** SEC-014. The cookie holding the other half of the handshake. */
+export const RESEND_NONCE = "connectapp-resend";
+
+/** A nonce for the browser, and the hash of it for the sealed state. */
+export function newNonce(): { value: string; hashed: string } {
+  const value = url64(randomBytes(32));
+  return { value, hashed: hashNonce(value) };
+}
+
+export const hashNonce = (value: string): string =>
+  createHash("sha256").update(`resend-nonce:${value}`).digest("base64url");
 
 const MINUTES = 15;
 

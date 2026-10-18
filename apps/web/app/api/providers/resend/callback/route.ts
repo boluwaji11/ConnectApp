@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import {
   withTenant, connectEmailProvider, saveSendingDomain, type TenantRole,
 } from "@connectapp/db";
-import { exchangeCode, openHandshake, resendClientId } from "@/lib/resend-oauth";
+import {
+  exchangeCode, openHandshake, resendClientId, hashNonce, RESEND_NONCE,
+} from "@/lib/resend-oauth";
+import { cookies } from "next/headers";
 import { resendDomain } from "@/lib/email-provider";
 import { here, redirectUri } from "../hop";
 
@@ -35,10 +38,25 @@ export async function GET(request: Request) {
 
   const refuse = (why: string) => {
     back.searchParams.set("resend", why);
-    return NextResponse.redirect(back);
+    const away = NextResponse.redirect(back);
+    /* SEC-014. Spent either way, so a captured URL cannot be tried twice. */
+    away.cookies.delete(RESEND_NONCE);
+    return away;
   };
 
   if (!held) return refuse("expired");
+
+  /*
+   * SEC-014. The browser that finishes this has to be the browser that started
+   * it. A sealed state proves somebody with the permission asked; the cookie
+   * proves it was this person, which is what stops an administrator of one
+   * church handing the URL to somebody else and collecting their Resend
+   * account.
+   */
+  const carried = (await cookies()).get(RESEND_NONCE)?.value ?? "";
+  if (!held.nonce || !carried || hashNonce(carried) !== held.nonce) {
+    return refuse("expired");
+  }
 
   /* The church pressed No on Resend's own screen, which is an answer rather
      than a fault. */

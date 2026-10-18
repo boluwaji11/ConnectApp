@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { canManageChurch } from "@connectapp/db";
 import { requireSession } from "@/lib/session";
-import { authorizeUrl, newVerifier, resendClientId, sealHandshake } from "@/lib/resend-oauth";
+import {
+  authorizeUrl, newVerifier, resendClientId, sealHandshake, newNonce, RESEND_NONCE,
+} from "@/lib/resend-oauth";
+import { spanningSubdomains } from "@/lib/cookie-domain";
 import { here, redirectUri } from "../hop";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +41,24 @@ export async function GET(request: Request) {
   const { host } = await here();
   const verifier = newVerifier();
 
-  return NextResponse.redirect(
+  /*
+   * SEC-014. The handshake is bound to this browser, not only sealed.
+   *
+   * The sealed state proves that somebody with the permission asked for this
+   * within the last fifteen minutes. It did not prove that the person who
+   * finishes it is the person who started it, and the landing reads no session
+   * by design. So an administrator of any church, including one they registered
+   * for the purpose, could mint this URL and send it to somebody else: if that
+   * person consented on Resend's own screen, their Resend account was attached
+   * to the attacker's church, and the scope asked for is full access.
+   *
+   * The nonce goes to the browser in a cookie and its hash goes into the state.
+   * The landing requires both, so a URL handed to somebody else no longer
+   * completes.
+   */
+  const nonce = newNonce();
+
+  const away = NextResponse.redirect(
     authorizeUrl({
       clientId,
       redirectUri: await redirectUri(),
@@ -52,8 +72,26 @@ export async function GET(request: Request) {
         from: address,
         name: (asked.searchParams.get("name") ?? "").trim(),
         verifier,
+        nonce: nonce.hashed,
       }),
       verifier,
     }),
   );
+
+  /*
+   * On the parent, because Resend returns to the parent and a cookie left on
+   * the church's own host would not be sent there. Fifteen minutes, matching
+   * the state it is paired with.
+   */
+  const options = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 15 * 60,
+    domain: undefined as string | undefined,
+  };
+  away.cookies.set(RESEND_NONCE, nonce.value, spanningSubdomains(options));
+
+  return away;
 }
