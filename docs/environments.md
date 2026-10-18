@@ -304,6 +304,8 @@ about a second.
 | Build it on a deployment | `curl -H "Authorization: Bearer $CRON_SECRET" https://connectapp.church/api/demo/refresh` |
 | Rebuilt nightly by | `.github/workflows/demo.yml`, 09:00 UTC |
 | Where it answers | `NEXT_PUBLIC_DEMO_HOST`, unset in production and `demo.dev.connectapp.church` on Preview |
+| What signs the pass | `DEMO_PASS_SECRET`. Unset, it is derived from `NOTE_ENCRYPTION_KEY` rather than borrowing it, so the two never share a value. Set one per environment. |
+| On the development deployment | Behind the team gate, like every other address there. Production is open on arrival. |
 
 **It is rebuilt nightly because a copy carries the dates it was built with.**
 The seed is written against the day it runs: a service happening today,

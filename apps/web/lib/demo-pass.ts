@@ -1,5 +1,5 @@
 import "server-only";
-import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 
 /**
@@ -19,10 +19,28 @@ import { DEMO_COOKIE } from "./demo-pass-name";
 
 const COOKIE = DEMO_COOKIE;
 
+/**
+ * SEC-029. The key this cookie is signed with.
+ *
+ * It fell back to `NOTE_ENCRYPTION_KEY`, which is the key a church's
+ * confidential pastoral notes are encrypted with. Using one key for two
+ * algorithms in two security domains is the thing key separation exists to
+ * stop: it means a demo pass and a pastoral note share a fate, and the
+ * architecture document promises the opposite for provider credentials for
+ * exactly this reason.
+ *
+ * Derived rather than reused where the fallback is taken, so the value that
+ * signs a cookie is not the value that decrypts a note even on a deployment
+ * that has not set its own. A deployment should still set one, and
+ * `docs/environments.md` says so.
+ */
 const secret = (): string => {
-  const value = process.env["DEMO_PASS_SECRET"] ?? process.env["NOTE_ENCRYPTION_KEY"];
-  if (!value) throw new Error("DEMO_PASS_SECRET or NOTE_ENCRYPTION_KEY must be set.");
-  return value;
+  const own = process.env["DEMO_PASS_SECRET"];
+  if (own) return own;
+
+  const borrowed = process.env["NOTE_ENCRYPTION_KEY"];
+  if (!borrowed) throw new Error("DEMO_PASS_SECRET or NOTE_ENCRYPTION_KEY must be set.");
+  return createHash("sha256").update(`${borrowed}:demo-pass`).digest("base64");
 };
 
 const sign = (payload: string): string =>

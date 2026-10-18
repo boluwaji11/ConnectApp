@@ -70,21 +70,54 @@ export async function middleware(request: NextRequest) {
   await supabase.auth.getClaims();
 
   /*
+   * HRT-402. On the development deployment, everything is behind the team.
+   *
+   * After the refresh above, so somebody whose pass has run out is still
+   * carrying a live session when they reach the door and walks back through it
+   * without typing anything.
+   *
+   * SEC-028. Before the demo branch, which used to return ahead of this.
+   *
+   * The comment there said the gate did not apply and that nothing was opened
+   * by it, because the host serves nothing but demo churches. The first half
+   * was true and the second was not: `NEXT_PUBLIC_DEMO_HOST` is
+   * `demo.dev.connectapp.church` on the development deployment, so that host
+   * answered every screen on it to anybody, which is the one thing the gate
+   * exists to stop. Seeded records, half-built screens and whatever was pushed
+   * twenty minutes ago were all reachable by a name somebody guessed, and a
+   * cookie with any value in it was enough to reach the sign-in form itself.
+   *
+   * Production is unaffected: `gated()` is false there, so the demo opens on
+   * arrival exactly as before.
+   */
+  const gatedOut = async () => {
+    if (!gated() || openInDev(request.nextUrl.pathname)) return null;
+    if (await passHolds(request.cookies.get(DEV_PASS)?.value)) return null;
+
+    const away = request.nextUrl.clone();
+    away.pathname = "/dev-gate";
+    away.search = `?next=${encodeURIComponent(request.nextUrl.pathname + request.nextUrl.search)}`;
+    return stamp(NextResponse.redirect(away));
+  };
+
+  /*
    * HRT-416. On the demo's own address, arriving is starting.
    *
    * A visitor with no pass is handed a church of their own and put back where
    * they were going. Everything after that is the product, carrying the pass
    * like any other demo.
-   *
-   * The dev gate does not apply here, and nothing is opened by that: this host
-   * serves nothing but demo churches, because a request without a pass never
-   * gets past the line below.
    */
   if (isDemoHost(request.headers.get("x-forwarded-host") ?? request.headers.get("host"))) {
+    const shut = await gatedOut();
+    if (shut) return shut;
+
     const pathname = request.nextUrl.pathname;
     const passing =
       pathname.startsWith(DEMO_ENTRY) ||
       pathname.startsWith("/auth/") ||
+      /* An API route carries its own proof and answers an unauthenticated
+         caller itself. Redirecting one to the demo door would answer a fetch
+         with a page. */
       pathname.startsWith("/api/");
 
     if (!passing && !request.cookies.get(DEMO_COOKIE)?.value) {
@@ -98,21 +131,8 @@ export async function middleware(request: NextRequest) {
     return stamp(response);
   }
 
-  /*
-   * HRT-402. On the development deployment, everything is behind the team.
-   *
-   * After the refresh above, so somebody whose pass has run out is still
-   * carrying a live session when they reach the door and walks back through
-   * it without typing anything.
-   */
-  if (gated() && !openInDev(request.nextUrl.pathname)) {
-    if (!(await passHolds(request.cookies.get(DEV_PASS)?.value))) {
-      const away = request.nextUrl.clone();
-      away.pathname = "/dev-gate";
-      away.search = `?next=${encodeURIComponent(request.nextUrl.pathname + request.nextUrl.search)}`;
-      return stamp(NextResponse.redirect(away));
-    }
-  }
+  const shut = await gatedOut();
+  if (shut) return shut;
 
   return stamp(response);
 }

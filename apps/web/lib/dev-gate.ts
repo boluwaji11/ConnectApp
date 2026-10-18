@@ -90,8 +90,30 @@ export async function passHolds(pass: string | undefined): Promise<boolean> {
   const body = pass.slice(0, cut);
   const given = pass.slice(cut + 1);
 
-  const mac = await crypto.subtle.sign("HMAC", await key(value), encoder.encode(body));
-  if (b64url(mac) !== given) return false;
+  /*
+   * SEC-028. Verified rather than compared.
+   *
+   * `b64url(mac) !== given` short-circuits on the first differing character.
+   * WebCrypto has a verify of its own that does not, and it is the same call
+   * with the signature handed in rather than recomputed.
+   *
+   * The decode is inside the try with it. This runs in middleware on every
+   * request the site answers, so a throw here is not a refused pass, it is a
+   * deployment that answers nothing.
+   */
+  let ok = false;
+  try {
+    const padded = given.replace(/-/g, "+").replace(/_/g, "/");
+    const signature = Uint8Array.from(
+      atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, "=")),
+      (c) => c.charCodeAt(0),
+    );
+    ok = await crypto.subtle.verify("HMAC", await key(value), signature, encoder.encode(body));
+  } catch {
+    /* Not base64, the wrong length, or not a signature at all. */
+    return false;
+  }
+  if (!ok) return false;
 
   const until = Number(body.slice(body.lastIndexOf(".") + 1));
   return Number.isFinite(until) && until > Date.now();
