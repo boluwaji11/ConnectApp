@@ -85,3 +85,8 @@ security-audit-private.md
 
 # Rendered by packages/mail/scripts/preview.mjs, for looking at.
 email-previews/
+
+# Outreach to churches. Draft letters, real contact details and a record of what
+# was sent, which is correspondence rather than code and does not belong in a
+# public repository.
+scripts/outreach/
