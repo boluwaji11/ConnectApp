@@ -55,17 +55,6 @@ export const GROUPS: Group[] = [
   {
     label: "Record",
     entries: [
-      /*
-       * HRT-453. Security was reachable only by typing its address.
-       *
-       * The screen shipped with HRT-396 and the way back in for an owner
-       * locked out of their own church shipped with HRT-441, and neither was
-       * ever put in this list. An operator who did not already know the URL
-       * could not find the one page that lets somebody back into their
-       * church, which is a feature that may as well not exist on the day it
-       * is needed.
-       */
-      { href: "/security", label: "Security" },
       { href: "/log", label: "Log" },
       { href: "/team", label: "Team" },
     ],
