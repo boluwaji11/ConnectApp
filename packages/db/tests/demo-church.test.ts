@@ -195,3 +195,34 @@ describe.skip("a demo pass", () => {
  * advance was proving a mechanism that no longer exists. What replaced it is
  * covered by `clone.test.ts`, which proves a copy holds what it came from.
  */
+
+describe("what a demo copy looks like on arrival", () => {
+  /*
+   * HRT-456, R22.1. The setup guide is put away before anybody sees it.
+   *
+   * A demo church is a church already running: members, services, groups,
+   * giving and a year of attendance. The guide read it as a church in its
+   * first week and told the visitor to add their members, and it costs a
+   * third of a laptop screen while saying so. On the giving screen that left
+   * 700px of a 1440px window for two tables, and both were clipped. With the
+   * rail away it is 1168px and neither is.
+   *
+   * Asserted on the clone rather than on the template, because the clone is
+   * what a visitor gets and a template written before this existed still has
+   * to produce copies that are right.
+   */
+  it("has the setup guide already dismissed", async () => {
+    const made = await createDemoChurch(crypto.randomUUID());
+    try {
+      const [row] = await owner()<{ dismissed: Date | null }[]>`
+        select setup_dismissed_at as dismissed from tenants where id = ${made.tenantId}`;
+      expect(row?.dismissed).not.toBeNull();
+    } finally {
+      await owner().begin(async (tx) => {
+        await tx`select set_config('app.audit_off', '1', true)`;
+        await tx`select set_config('app.purge', '1', true)`;
+        await tx`delete from tenants where id = ${made.tenantId}`;
+      });
+    }
+  }, 300_000);
+});

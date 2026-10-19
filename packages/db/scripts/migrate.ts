@@ -38,7 +38,44 @@ async function main() {
     ? required("CONNECTAPP_APP_PASSWORD")
     : required("HEARTH_APP_PASSWORD");
   await sql.unsafe(`set hearth.app_password = '${appPassword.replace(/'/g, "''")}'`);
-  await sql.unsafe(security);
+
+  /*
+   * HRT-455. A lock this file cannot get quickly is given up rather than
+   * queued for.
+   *
+   * `security.sql` alters tables, rewrites policies and rebuilds triggers,
+   * and each of those wants an ACCESS EXCLUSIVE lock. Against a live database
+   * one of them lands behind an ordinary page render, and the damage is not
+   * the waiting: a lock request that waits blocks every later reader of that
+   * table behind it, so one slow read becomes a queue, and the statement
+   * eventually dies on the statement timeout and takes the whole file with
+   * it. A production deployment failed exactly this way on `church_sites`.
+   *
+   * Two seconds, then give up. Nothing queues behind a request that is not
+   * waiting, and the file is simply run again: almost everything in it is now
+   * guarded by a catalogue read, so a second attempt has less to do than the
+   * first and finds the moment between two requests that it needs.
+   */
+  await sql.unsafe("set lock_timeout = '2s'");
+
+  const ATTEMPTS = 5;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await sql.unsafe(security);
+      break;
+    } catch (error) {
+      /* 55P03 is lock_not_available, which is this and nothing else. Anything
+         else is a real fault and is not worth retrying. */
+      const code = (error as { code?: string }).code;
+      if (code !== "55P03" || attempt === ATTEMPTS) throw error;
+      const wait = attempt * 3000;
+      console.log(
+        `  a table was busy, so the lock was given up rather than queued for.`
+        + ` Trying again in ${wait / 1000}s (${attempt} of ${ATTEMPTS - 1}).`,
+      );
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
 
   const policyRows = await sql<{ count: string }[]>`
     select count(*)::text as count from pg_policies where schemaname = 'public'`;

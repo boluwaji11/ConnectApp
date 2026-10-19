@@ -45,7 +45,40 @@ begin
     end if;
   end loop;
 end $$;
-grant select, insert, update, delete on all tables in schema public to hearth_app;
+/*
+ * HRT-455. Granted only where it is not already granted.
+ *
+ * `grant ... on all tables in schema public` is one statement that takes an
+ * ACCESS EXCLUSIVE lock on every table in the schema, every time this file
+ * runs, whether or not a single privilege changes. That is the last of the
+ * locks that made a deployment wait behind an ordinary page render, and the
+ * one that made it wait on all hundred tables at once.
+ *
+ * `has_table_privilege` answers from the catalogue and takes nothing. On a
+ * database already in the right shape this loop grants nothing and locks
+ * nothing. A table that is missing a privilege, which is every table the
+ * moment after a migration creates one, is granted as before.
+ */
+do $$
+declare t text;
+begin
+  for t in
+    select c.relname
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relkind = 'r'
+       and not (
+         has_table_privilege('hearth_app', c.oid, 'SELECT')
+         and has_table_privilege('hearth_app', c.oid, 'INSERT')
+         and has_table_privilege('hearth_app', c.oid, 'UPDATE')
+         and has_table_privilege('hearth_app', c.oid, 'DELETE')
+       )
+  loop
+    execute format(
+      'grant select, insert, update, delete on public.%I to hearth_app', t);
+  end loop;
+end $$;
+
 grant usage, select on all sequences in schema public to hearth_app;
 alter default privileges in schema public grant select, insert, update, delete on tables to hearth_app;
 
@@ -76,8 +109,24 @@ begin
       join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public' and c.relkind = 'r' and c.relname like 'platform\_%'
   loop
-    execute format('revoke all on public.%I from hearth_app', t);
-    execute format('alter table public.%I enable row level security', t);
+    /* HRT-455. A revoke locks the table whether or not there is anything on
+       it to take away, so it is asked for first. */
+    if exists (
+      select 1 from pg_class c
+       where c.relname = t and c.relnamespace = 'public'::regnamespace
+         and (has_table_privilege('hearth_app', c.oid, 'SELECT')
+              or has_table_privilege('hearth_app', c.oid, 'INSERT')
+              or has_table_privilege('hearth_app', c.oid, 'UPDATE')
+              or has_table_privilege('hearth_app', c.oid, 'DELETE'))
+    ) then
+      execute format('revoke all on public.%I from hearth_app', t);
+    end if;
+
+    if not (select c.relrowsecurity from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relname = t) then
+      execute format('alter table public.%I enable row level security', t);
+    end if;
   end loop;
 
   /*
@@ -172,28 +221,99 @@ begin
       -- SEC-011. The platform's own, which no church reaches. See above.
       and c.relname not like 'platform\_%'
   loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('alter table public.%I no force row level security', t);
-    execute format('drop policy if exists tenant_isolation on public.%I', t);
+    /*
+     * HRT-455. Only when it is not already what it should be.
+     *
+     * `alter table ... enable row level security` takes an ACCESS EXCLUSIVE
+     * lock whether or not it changes anything, so running it over a hundred
+     * tables on every deployment meant a hundred exclusive locks taken for
+     * nothing. Against a live database one of them waits behind an ordinary
+     * read, hits the statement timeout, and the whole file rolls back: a
+     * production deployment failed on `church_sites` this way with nothing
+     * wrong with it.
+     *
+     * Reading `pg_class` first costs nothing and takes no lock, and on a
+     * database already in the right shape this loop now takes none either.
+     */
+    if not (select c.relrowsecurity from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relname = t) then
+      execute format('alter table public.%I enable row level security', t);
+    end if;
+
+    if (select c.relforcerowsecurity from pg_class c
+          join pg_namespace n on n.oid = c.relnamespace
+         where n.nspname = 'public' and c.relname = t) then
+      execute format('alter table public.%I no force row level security', t);
+    end if;
+
     /*
      * R21.1. One policy a table, and it is this one.
      *
+     * HRT-455. Rewritten only when it is not already right. `drop policy` and
+     * `create policy` each take an ACCESS EXCLUSIVE lock, the same as the
+     * ALTER above, and dropping and recreating a hundred identical policies
+     * on every deployment is a hundred exclusive locks taken to arrive back
+     * where we started. Reading `pg_policies` first takes none.
+     *
+     * The comparison is the whole policy, not its name: a policy that exists
+     * under this name with a different rule in it is the dangerous case, and
+     * that one is still rewritten.
+     */
+    if not exists (
+      select 1 from pg_policies
+       where schemaname = 'public' and tablename = t
+         and policyname = 'tenant_isolation'
+         and permissive = 'PERMISSIVE'
+         and cmd = 'ALL'
+         and qual = '(tenant_id = app_tenant_id())'
+         and with_check = '(tenant_id = app_tenant_id())'
+    ) then
+      execute format('drop policy if exists tenant_isolation on public.%I', t);
+      execute format(
+        'create policy tenant_isolation on public.%I using (tenant_id = app_tenant_id()) with check (tenant_id = app_tenant_id())',
+        t
+      );
+    end if;
+
+    /*
      * A few migrations wrote a second policy of their own, named after the
      * table, that cast the setting straight to uuid. With no tenant set that
      * cast raises rather than matching nothing, so a query with no context
      * answered with an error instead of with an empty result, and a reader
      * learned that the table exists. Any such policy is taken off here.
+     *
+     * Asked for before it is dropped, because `drop policy if exists` takes
+     * the table's lock whether or not there is anything to drop.
      */
-    execute format('drop policy if exists %I on public.%I', t || '_tenant', t);
-    execute format(
-      'create policy tenant_isolation on public.%I using (tenant_id = app_tenant_id()) with check (tenant_id = app_tenant_id())',
-      t
-    );
+    if exists (
+      select 1 from pg_policies
+       where schemaname = 'public' and tablename = t and policyname = t || '_tenant'
+    ) then
+      execute format('drop policy if exists %I on public.%I', t || '_tenant', t);
+    end if;
   end loop;
 end $$;
 
+/*
+ * HRT-455. The named tables, each guarded the same way.
+ *
+ * `alter table ... enable row level security` is idempotent in its result and
+ * not in its cost: it takes an ACCESS EXCLUSIVE lock every time. On a live
+ * database that is a deployment waiting behind a page render.
+ */
+create or replace function pg_temp.rls_on(table_name text) returns void
+language plpgsql as $$
+begin
+  if not (select c.relrowsecurity from pg_class c
+            join pg_namespace n on n.oid = c.relnamespace
+           where n.nspname = 'public' and c.relname = table_name) then
+    execute format('alter table public.%I enable row level security', table_name);
+  end if;
+end $$;
+
 -- The tenants table itself keys on id, not tenant_id.
-alter table public.tenants enable row level security;
+select pg_temp.rls_on('tenants');
 alter table public.tenants no force row level security;
 drop policy if exists tenant_isolation on public.tenants;
 create policy tenant_isolation on public.tenants
@@ -201,7 +321,7 @@ create policy tenant_isolation on public.tenants
 
 -- app_users is global, so it is reachable only for users who belong to the
 -- current tenant. Without this, a join could enumerate every user on the platform.
-alter table public.app_users enable row level security;
+select pg_temp.rls_on('app_users');
 alter table public.app_users no force row level security;
 drop policy if exists tenant_members_only on public.app_users;
 create policy tenant_members_only on public.app_users
@@ -228,7 +348,7 @@ create policy tenant_members_only on public.app_users
 -- Read and written only on the owner connection, before a tenant context
 -- exists, the same way a membership is. RLS on with no policy means the
 -- application role sees nothing even if a grant is restored by accident.
-alter table public.account_recovery_codes enable row level security;
+select pg_temp.rls_on('account_recovery_codes');
 revoke all on public.account_recovery_codes from hearth_app;
 
 -- ---------------------------------------------------------------------------
@@ -419,11 +539,28 @@ begin
       execute format('drop trigger %I on public.%I', old_trigger, t);
     end loop;
 
-    execute format('drop trigger if exists audit_%1$s on public.%1$I', t);
-    execute format(
-      'create trigger audit_%1$s after insert or update or delete on public.%1$I for each row execute function audit_write()',
-      t
-    );
+    /*
+     * HRT-455. Made only where it is not already there.
+     *
+     * `drop trigger` and `create trigger` take the table's ACCESS EXCLUSIVE
+     * lock the same as a policy does, so rebuilding a hundred identical
+     * triggers on every deployment is a hundred locks for nothing. The
+     * catalogue answers whether the right one is already in place, and reading
+     * it takes no lock at all.
+     */
+    if not exists (
+      select 1 from pg_trigger
+       where tgrelid = format('public.%I', t)::regclass
+         and not tgisinternal
+         and tgname = 'audit_' || t
+         and tgfoid = 'public.audit_write()'::regprocedure
+    ) then
+      execute format('drop trigger if exists audit_%1$s on public.%1$I', t);
+      execute format(
+        'create trigger audit_%1$s after insert or update or delete on public.%1$I for each row execute function audit_write()',
+        t
+      );
+    end if;
   end loop;
 end $$;
 
@@ -542,7 +679,7 @@ grant execute on function public.audit_write() to hearth_app;
 -- The log is append only. Insert is allowed so the trigger and the confidential
 -- read path can write; nothing may change or remove an entry.
 revoke update, delete, truncate on public.audit_entries from hearth_app;
-alter table public.audit_entries enable row level security;
+select pg_temp.rls_on('audit_entries');
 alter table public.audit_entries no force row level security;
 drop policy if exists tenant_isolation on public.audit_entries;
 create policy tenant_isolation on public.audit_entries

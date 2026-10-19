@@ -849,7 +849,6 @@ export const en = {
   "demo.start": "See a demo",
   "demo.banner.title": "You're exploring a demo church",
   "demo.banner.body": "This church uses sample data so you can try ConnectApp.",
-  "demo.banner.signUp": "Create your church",
   "signOut.confirmTitle": "Sign out?",
   "signOut.confirmBody": "Anything you haven't saved on this page is lost.",
   "signOut.stay": "Stay signed in",

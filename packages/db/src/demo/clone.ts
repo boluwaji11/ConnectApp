@@ -210,6 +210,20 @@ export async function cloneTenant(fromTenantId: string, into: CloneInto): Promis
       /* A copy cannot carry the template's web address: it is unique across
          every church and is the one thing two churches cannot share. */
       portal_name: "null",
+      /*
+       * HRT-456, R22.1. The setup guide is put away on every copy.
+       *
+       * A demo church is already running: members, services, groups, giving
+       * and a year of attendance. The guide read it as a church in its first
+       * week and told the visitor to add their members, and it costs a third
+       * of a laptop screen while doing it, which left the giving tables
+       * squeezed into what was left.
+       *
+       * Set here rather than relying on the template carrying it, so a
+       * template written before this existed still makes copies that are
+       * right, and the next nightly rebuild is not what fixes the demo.
+       */
+      setup_dismissed_at: "now()",
       /* Cast and coalesced rather than left out when no timezone is given,
          because a parameter the statement never mentions is a parameter
          Postgres cannot find a type for. */

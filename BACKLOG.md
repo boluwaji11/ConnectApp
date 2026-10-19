@@ -1156,6 +1156,12 @@ of money and after everything else.
 | HRT-451 | Two indexes on addresses were the same index twice | R24.12 | Resolved |
 | HRT-452 | Finishing required two-step lands in the church, not on the front page | R1.8, R22.3 | Resolved |
 | HRT-454 | No branch deploys itself, so a day's pushes cannot spend the quota | R21.x | Resolved |
+| HRT-456 | The demo arrives with the setup guide away, so the product has the room | R19.7, R22.1 | Resolved |
+| HRT-455 | A deployment gives up a lock rather than queueing behind a page render | R21.x | Resolved |
+| HRT-457 | The demo turns nobody away: the shared ceiling is gone | R19.7 | Resolved |
+| HRT-459 | The demo banner says it is a demo and sells nothing | R19.7 | Resolved |
+| HRT-460 | Every screen, both engines, with the presses: scripts/sweep.mjs | R24.11 | Resolved |
+| HRT-458 | A per-visitor ceiling on the demo, generous enough nobody meets it | R19.7 | Open |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |

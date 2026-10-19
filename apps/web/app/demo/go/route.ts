@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createDemoChurch } from "@connectapp/db";
 import { issueDemoPass, newDemoUserId } from "@/lib/demo-pass";
 import { backTo, isDemoHost } from "@/lib/demo-host";
-import { withinLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,21 +36,27 @@ export async function GET(request: NextRequest) {
   const next = asked && asked.startsWith("/") && !asked.startsWith("//") ? asked : "/dashboard";
 
   /*
-   * SEC-026. A church is copied here, which is the most expensive thing an
-   * unauthenticated request can ask this product to do.
+   * HRT-457, SEC-026. The ceiling that used to be here is gone.
    *
-   * Every call writes a whole tenant: every table, every row, a few hundred of
-   * them. Nothing is at stake in any one of them, which the note above is
-   * right about, but nothing stopped somebody asking for ten thousand either,
-   * and the sweep that clears them runs on a schedule rather than ahead of the
-   * next request. Generous, because arriving at a demo and being turned away is
-   * the one thing this address must not do, and a refusal here still shows the
-   * product's own front page rather than an error.
+   * It allowed twenty demos every ten minutes and it counted them for the
+   * whole platform rather than per visitor, so one person opening the demo a
+   * few times turned it off for everybody else. Past it, a visitor was
+   * redirected to the marketing page with `?demo=busy`, which reads exactly
+   * like a product that does not work. Writing a demo church is the most
+   * expensive thing an unauthenticated request can ask of this product, and
+   * the answer to that is not a number that turns real visitors away.
+   *
+   * What still bounds it: a demo church lives for a day and the nightly sweep
+   * removes it, the host check above means only the demo's own address
+   * reaches here, and the pass is written on the way out so an ordinary
+   * visitor creates one church and then carries it.
+   *
+   * What is left open, and named rather than implied: somebody who wants to
+   * can ask for a church in a loop and fill a day's worth before the sweep
+   * runs. A per-visitor ceiling generous enough that nobody real ever meets
+   * it is the thing to put back, and it is HRT-458 rather than a number
+   * picked in a hurry.
    */
-  const allowance = await withinLimit("demo", 20, "10 m");
-  if (allowance !== "ok") {
-    return NextResponse.redirect(backTo(request.headers, "/?demo=busy"));
-  }
 
   const userId = newDemoUserId();
   const demo = await createDemoChurch(userId);

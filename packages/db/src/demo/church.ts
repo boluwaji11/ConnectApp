@@ -59,12 +59,29 @@ async function buildDemoChurch(
    * no messaging credentials and no Stripe account, so an invitation sends
    * nowhere and a gift cannot be taken.
    */
+  /*
+   * HRT-456, R22.1. The setup guide is put away before anybody arrives.
+   *
+   * A demo church is a church that is already running: it has members,
+   * services, groups, giving and a year of attendance. The guide read it as a
+   * church in its first week and told the visitor to add their members, which
+   * is both wrong and in the way: open, it takes a third of a laptop screen,
+   * and the giving table was being squeezed into what was left.
+   *
+   * Somebody evaluating this product should see the product. The guide is the
+   * right thing for a church that just signed up and the wrong thing for the
+   * one screen whose whole job is to show what the product looks like in use.
+   */
   const [tenant] = await sql<{ id: string }[]>`
-    insert into tenants (slug, name, timezone, demo_expires_at, approved_at, approved_by)
+    insert into tenants (
+      slug, name, timezone, demo_expires_at, approved_at, approved_by,
+      setup_dismissed_at
+    )
     values (
       ${slug}, ${DEMO_NAME}, 'America/Chicago',
       ${how.template ? null : new Date(Date.now() + DEMO_LIFETIME_HOURS * 60 * 60 * 1000)},
-      now(), 'demo'
+      now(), 'demo',
+      now()
     )
     returning id`;
 
