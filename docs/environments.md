@@ -377,3 +377,28 @@ environment and wrong in another. It says so rather than pretending.
 
 `pnpm --filter @connectapp/db pending` answers the migration question on its
 own, against whichever database the environment names.
+
+## No branch deploys itself
+
+HRT-454. `vercel.json` turns Vercel's own git deployments off for both `main`
+and `production`.
+
+**`production`** because the deploy workflow owns the order: the migrations are
+applied and only then are the sites deployed, and a git deployment racing that
+is new code against an old schema. See `.github/workflows/deploy.yml`.
+
+**`main`** because every push was building a preview nobody read.
+`dev.connectapp.church` is an alias pinned to a chosen deployment rather than
+one that follows the branch, so those builds were made and thrown away. On the
+Hobby plan that is a hundred deployments a day, and a day of ordinary work
+spent them: a deploy to production then failed on
+`api-deployments-free-per-day` with nothing wrong with the code.
+
+**So nothing deploys without being asked.** Production goes through the
+workflow. To move development, deploy and point the alias:
+
+```
+vercel deploy                       # from the repository root
+vercel alias <the new url> dev.connectapp.church
+vercel alias <the new url> '*.dev.connectapp.church'
+```
