@@ -13,6 +13,7 @@ import { sql as raw } from "drizzle-orm";
 import { owner, appDb, withTenant, closeConnections } from "../src/client";
 import { listPeople } from "../src/repo/members";
 import { listNotesForPerson } from "../src/repo/notes";
+import { whyRefused } from "./helpers/refusal";
 
 let riverside: string;
 let northgate: string;
@@ -172,13 +173,16 @@ describe("cross-tenant reads through raw SQL, on every table", () => {
 
 describe("cross-tenant writes", () => {
   it("refuses an insert stamped with another tenant's id", async () => {
-    await expect(
+    /* HRT-432. The reason is asserted, not merely that it threw: a write that
+       failed on a typo would pass a looser test and prove nothing. */
+    const said = await whyRefused(() =>
       withTenant({ tenantId: riverside, role: "owner" }, (tx) =>
         tx.execute(raw`
           insert into members (tenant_id, first_name, last_name)
           values (${northgate}::uuid, ${"Injected"}, ${"Row"})`),
       ),
-    ).rejects.toThrow(/row-level security/i);
+    );
+    expect(said).toMatch(/row-level security/i);
   });
 
   it("updates nothing when targeting another tenant's row", async () => {
@@ -324,19 +328,21 @@ describe("the audit log is append only (R1.11)", () => {
   });
 
   it("cannot be updated by the owner role of the tenant", async () => {
-    await expect(
+    const said = await whyRefused(() =>
       withTenant({ tenantId: riverside, role: "owner" }, (tx) =>
         tx.execute(raw`update audit_entries set action = 'read' where tenant_id = ${riverside}::uuid`),
       ),
-    ).rejects.toThrow(/permission denied/i);
+    );
+    expect(said).toMatch(/permission denied/i);
   });
 
   it("cannot be deleted by the owner role of the tenant", async () => {
-    await expect(
+    const said = await whyRefused(() =>
       withTenant({ tenantId: riverside, role: "owner" }, (tx) =>
         tx.execute(raw`delete from audit_entries where tenant_id = ${riverside}::uuid`),
       ),
-    ).rejects.toThrow(/permission denied/i);
+    );
+    expect(said).toMatch(/permission denied/i);
   });
 
   it("never records a confidential note's ciphertext", async () => {

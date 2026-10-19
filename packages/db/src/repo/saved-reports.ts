@@ -3,7 +3,7 @@ import type { Tx } from "../client";
 import type { Permission } from "../permissions";
 import { savedReports } from "../schema/reports";
 import { appUsers, tenantMembers } from "../schema/tenancy";
-import { InvalidInputError, NameTakenError } from "../errors";
+import { InvalidInputError, NameTakenError, isUniqueViolation } from "../errors";
 import { PermissionError, canEditPeople, type TenantRole } from "../roles";
 import { canManageChurch } from "./church";
 import { canReadIncidents } from "./incidents";
@@ -180,7 +180,7 @@ export async function createSavedReport(
       .returning();
     return shape(row!);
   } catch (error) {
-    if (String((error as { message?: string }).message ?? "").includes("saved_reports_name_unique")) {
+    if (isUniqueViolation(error, "saved_reports_name_unique")) {
       throw new NameTakenError("report.error.nameTaken", name, "");
     }
     throw error;
@@ -213,7 +213,7 @@ export async function updateSavedReport(
   try {
     await db.update(savedReports).set(patch).where(eq(savedReports.id, input.id));
   } catch (error) {
-    if (String((error as { message?: string }).message ?? "").includes("saved_reports_name_unique")) {
+    if (isUniqueViolation(error, "saved_reports_name_unique")) {
       throw new NameTakenError("report.error.nameTaken", patch.name ?? "", input.id);
     }
     throw error;

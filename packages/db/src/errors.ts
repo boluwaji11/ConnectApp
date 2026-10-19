@@ -43,3 +43,28 @@ export class NameTakenError extends Error implements UserFacingError {
     this.existingId = existingId;
   }
 }
+
+/**
+ * HRT-432. Whether a failed write collided with a named unique constraint.
+ *
+ * The four callers of this used to match on `error.message`, which held the
+ * constraint's name because that is what postgres.js put there. drizzle 0.45
+ * wraps a driver error in one of its own and the message becomes "Failed
+ * query: insert into ...", so every one of those checks silently stopped
+ * matching: a duplicate name went from a sentence the form could show to an
+ * unhandled error and a 500.
+ *
+ * So it reads the driver's own fields instead, down the `cause` chain, which
+ * is where the information actually is and is not a string anybody formats.
+ * `23505` is unique_violation.
+ */
+export function isUniqueViolation(error: unknown, constraint: string): boolean {
+  for (let at: unknown = error, depth = 0; at && depth < 5; depth += 1) {
+    const one = at as { code?: unknown; constraint_name?: unknown; message?: unknown; cause?: unknown };
+    if (one.code === "23505" && one.constraint_name === constraint) return true;
+    /* Older drivers, and anything that only ever had the sentence. */
+    if (typeof one.message === "string" && one.message.includes(constraint)) return true;
+    at = one.cause;
+  }
+  return false;
+}

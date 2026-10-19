@@ -45,6 +45,29 @@ create index if not exists address_city_trgm
 create index if not exists address_postal_trgm
   on addresses using gin (lower(coalesce(postal_code, '')) extensions.gin_trgm_ops);
 
--- The joins the search makes, which are by person and by household.
-create index if not exists address_member_idx on addresses (tenant_id, member_id);
-create index if not exists address_household_idx on addresses (tenant_id, household_id);
+-- HRT-451. The same index, under names this product used to use.
+--
+-- The joins the search makes, by person and by household, are already indexed
+-- by the schema as `addresses_person_idx` and `addresses_household_idx`
+-- (migration 0019). This file created two more over the same columns in the
+-- same order, and an older deployment carries a third from when a member was
+-- called a person. Postgres kept every one of them and maintained all of them
+-- on every write, which is a tax on the import path and on every member a
+-- church adds. Supabase's own advisor reported them as duplicates.
+--
+-- The `people_*` names on members are from before the table was renamed, so a
+-- database created since has never had them and a database older than the
+-- rename still does. That is why this is a drop rather than a migration: it
+-- has to be true of both, and the ones this file created would come back on
+-- the next run of this file anyway.
+--
+-- Nothing here drops an index the schema declares. Each of these is a second
+-- copy of one that stays.
+drop index if exists address_member_idx;
+drop index if exists address_household_idx;
+drop index if exists address_person_idx;
+
+drop index if exists people_first_name_trgm;
+drop index if exists people_last_name_trgm;
+drop index if exists people_preferred_name_trgm;
+drop index if exists people_full_name_trgm;

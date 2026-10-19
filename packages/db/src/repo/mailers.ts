@@ -2,7 +2,7 @@ import { asc, desc, eq, isNull, sql } from "drizzle-orm";
 import type { Tx } from "../client";
 import type { Permission } from "../permissions";
 import { mailers } from "../schema/mailers";
-import { InvalidInputError, NameTakenError } from "../errors";
+import { InvalidInputError, NameTakenError, isUniqueViolation } from "../errors";
 import { PermissionError, canEditPeople, type TenantRole } from "../roles";
 
 /**
@@ -143,7 +143,7 @@ export async function createMailer(
       .returning();
     return shape(row!);
   } catch (error) {
-    if (String((error as { message?: string }).message ?? "").includes("mailers_name_unique")) {
+    if (isUniqueViolation(error, "mailers_name_unique")) {
       throw new NameTakenError("post.error.nameTaken", name, "");
     }
     throw error;
@@ -210,7 +210,7 @@ export async function updateMailer(db: Tx, actor: Actor, input: MailerPatch): Pr
   try {
     await db.update(mailers).set(patch).where(eq(mailers.id, input.id));
   } catch (error) {
-    if (String((error as { message?: string }).message ?? "").includes("mailers_name_unique")) {
+    if (isUniqueViolation(error, "mailers_name_unique")) {
       throw new NameTakenError("post.error.nameTaken", patch.name ?? "", input.id);
     }
     throw error;

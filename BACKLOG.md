@@ -1134,7 +1134,7 @@ of money and after everything else.
 | HRT-429 | A picker is a read of the directory, so it asks the same permission | R3.2, R3.4, R21.2 | Resolved |
 | HRT-430 | Secrets out of the audit log, a recorded read, and a child called an adult | R1.11, R6.2, R3.4 | Resolved |
 | HRT-431 | A limit on what an unauthenticated caller can make us do | R21.5, R13.2 | Resolved |
-| HRT-432 | drizzle-orm to 0.45.x, behind the isolation suite | R21.1 | Active |
+| HRT-432 | drizzle-orm to 0.45.x, behind the isolation suite | R21.1 | Resolved |
 | HRT-433 | The development gate applies to the demo host too | R21.3, R19.7 | Resolved |
 | HRT-434 | What an operator read, not only what they changed | R1.11, R21.3 | Resolved |
 | HRT-435 | Append-only enforced in the database, not by the absence of a writer | R1.11, R8.x | Resolved |
@@ -1150,9 +1150,10 @@ of money and after everything else.
 | HRT-445 | A seeded account gets the record the member screens read | R3.x, R17.4 | Resolved |
 | HRT-446 | Pastoral can write a note, which is most of what pastoral does | R2.7, R6.2 | Resolved |
 | HRT-447 | The record panel reads as four transactions, not eighteen round trips | R24.11, R24.12 | Resolved |
-| HRT-448 | Every screen pays a round trip per read, because nothing pipelines | R24.11, R24.12 | Open |
+| HRT-448 | Fewer round trips per screen, because the pooler will not pipeline | R24.11, R24.12 | Resolved |
 | HRT-449 | The settings menu sticks under the environment bar, not behind it | R24.6 | Resolved |
 | HRT-450 | A push to production migrates and deploys, in that order | R21.x | Resolved |
+| HRT-451 | Two indexes on addresses were the same index twice | R24.12 | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |

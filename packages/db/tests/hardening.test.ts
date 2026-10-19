@@ -332,3 +332,34 @@ describe("the request path cannot switch its own auditing off", () => {
     await deleteTenantsLike("auditoff2");
   });
 });
+
+describe("no table carries the same index twice", () => {
+  /*
+   * HRT-451. `search.sql` created `address_member_idx` and
+   * `address_household_idx` over the same two columns, in the same order, that
+   * the schema already indexed as `addresses_person_idx` and
+   * `addresses_household_idx`. Postgres kept all four and maintained every one
+   * of them on every write, which is a tax on the import path and on every
+   * member a church adds.
+   *
+   * It went unnoticed because nothing broke: a duplicate index is correct, it
+   * is only wasteful. Supabase's own advisor found it. This is the version
+   * that fails a build instead.
+   */
+  it("has no two indexes with the same definition on one table", async () => {
+    const rows = await owner()<{ tablename: string; names: string[] }[]>`
+      select tablename, array_agg(indexname order by indexname) as names
+        from (
+          select tablename, indexname,
+                 regexp_replace(indexdef, '^CREATE (UNIQUE )?INDEX [^ ]+ ', '') as body
+            from pg_indexes where schemaname = 'public'
+        ) x
+       group by tablename, body
+      having count(*) > 1`;
+
+    expect(
+      rows.map((r) => `${r.tablename}: ${r.names.join(" = ")}`),
+      "duplicate indexes, maintained on every write for nothing",
+    ).toEqual([]);
+  });
+});

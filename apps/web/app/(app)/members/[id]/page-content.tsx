@@ -213,9 +213,25 @@ export async function PersonPanelPage({
    * trade: a panel somebody is waiting on, against connections a church is
    * not otherwise using while they wait.
    */
-  const person = await where((tx) =>
-    getPerson(tx, id, { role: session.role, userId: session.userId }),
-  );
+  /*
+   * HRT-448. The church's own lists ride with the record lookup.
+   *
+   * The fields, the tags and the campuses need the church and not the person,
+   * so they were travelling in the parallel phase below and paying their own
+   * BEGIN, `set_config` and COMMIT for about 120ms of reading. Here they cost
+   * nothing extra: this transaction is open and waiting on a round trip
+   * either way.
+   */
+  const [person, customFields, allTags, campuses] = await where(async (tx) => [
+    await getPerson(tx, id, { role: session.role, userId: session.userId }),
+    /* R1.10. Whatever this church decided a person needs. It was on the form
+       and in the directory and nowhere on the record itself. */
+    await listCustomFields(tx, "person"),
+    /* R1.13. Every tag this church keeps, so one can be put on or taken off
+       from the record itself. */
+    await listTags(tx),
+    await listCampuses(tx),
+  ] as const);
 
   // Not found and not permitted are the same response on purpose. A person in
   // another church must not be distinguishable from a person who does not exist.
@@ -225,23 +241,29 @@ export async function PersonPanelPage({
   // works from the record's own id rather than from whatever was in the URL.
   const memberId = person.id;
 
+  /*
+   * HRT-448. Four groups, balanced so none is much longer than the others.
+   *
+   * The timeline used to be the long pole on its own at seven round trips.
+   * Now that it is three, the groups are evened out again: the slowest group
+   * is what the panel waits for, so a group carrying twice the work of its
+   * neighbours is the whole cost.
+   */
   const [
-    [contacts, addresses, household],
-    history,
-    [groups, serving, giving, customValues, memberTags, anniversary, milestoneRows, checkStanding],
-    [customFields, allTags, campuses],
+    [contacts, household],
+    [history, addresses],
+    [groups, serving, giving, customValues],
+    [memberTags, anniversary, milestoneRows, checkStanding],
   ] = await Promise.all([
     where(async (tx) => [
       // R2.4. Every way of reaching them, not only the one that leads.
       await listContacts(tx, memberId),
-      await listAddresses(tx, memberId),
       await householdFor(tx, memberId),
     ] as const),
 
-    // R2.15. Everything that has happened with this person, in one order. It
-    // reads six tables one after another, so it travels on its own.
-    where((tx) =>
-      personTimeline(
+    where(async (tx) => [
+      // R2.15. Everything that has happened with this person, in one order.
+      await personTimeline(
         tx,
         { tenantId: session.tenantId, role: session.role, userId: session.userId, permissions: session.permissions },
         memberId,
@@ -249,7 +271,8 @@ export async function PersonPanelPage({
            filed under the evening it happened. */
         { timezone: zone },
       ),
-    ),
+      await listAddresses(tx, memberId),
+    ] as const),
 
     where(async (tx) => [
       await groupsForPerson(tx, memberId),
@@ -258,24 +281,15 @@ export async function PersonPanelPage({
         ? await givingForPerson(tx, memberId, { from: `${year}-01-01`, to: `${year}-12-31` })
         : null,
       await getCustomValues(tx, "person", memberId),
+    ] as const),
+
+    where(async (tx) => [
       await listTagsForPerson(tx, memberId),
       await anniversaryOf(tx, memberId),
       /* R2.6, R2.10. The dates a church is asked for and cannot produce, and
          the check that decides whether somebody may serve with children. */
       await listMilestones(tx, memberId),
       canSeeChecks(session) ? await checksFor(tx, session, memberId) : null,
-    ] as const),
-
-    /* What the church holds rather than what this person holds, so it waits
-       for nothing and travels beside the rest. */
-    where(async (tx) => [
-      /* R1.10. Whatever this church decided a person needs. It was on the
-         form and in the directory and nowhere on the record itself. */
-      await listCustomFields(tx, "person"),
-      /* R1.13. Every tag this church keeps, so one can be put on or taken off
-         from the record itself. */
-      await listTags(tx),
-      await listCampuses(tx),
     ] as const),
   ]);
 

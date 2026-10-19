@@ -321,11 +321,26 @@ it stayed hidden.
 **What was believed:** `Promise.all` of several drizzle reads inside one
 `withTenant` transaction sends them together and pays one round trip.
 
-**What happens:** drizzle's postgres-js driver sends every statement through
-`client.unsafe()`, and postgres.js will only pipeline a statement the
-connection has already parsed. `unsafe` sets `prepare: false` on the query, so
-nothing is ever cached and every distinct statement waits for its own Parse,
-Describe and Bind before the next one is written.
+**What happens:** every distinct statement costs a full round trip, whether it
+is issued alone or inside a `Promise.all`.
+
+**Why, corrected on 19 October 2026.** The first reading of this blamed
+drizzle, which sends every statement through `client.unsafe()` with
+`prepare: false`. That is true and it is not the cause. Four things were tried
+against the development database and none of them changed the number:
+`prepare: true` on the postgres.js client, `prepare: true` forced on each
+`unsafe` call, both together, and drizzle 0.45 which passes the option through
+properly. Even eight statements already parsed on a warm connection cost
+477ms together and 511ms one after another.
+
+The limit is the transaction pooler. Supabase is reached on port 6543 through
+Supavisor, which does not pipeline: it waits for each statement to complete
+before forwarding the next, whatever the client asks for. No driver flag
+reaches past it.
+
+**So the only thing that makes a screen faster is asking fewer times.** Not
+issuing the asks together, not preparing them, not upgrading the driver.
+Fewer statements.
 
 ```
 the same read, eight times, in turn:      224ms
@@ -358,7 +373,37 @@ because the address may carry a readable name rather than an id, and then runs
 four tenant transactions at once, balanced so no group is much longer than the
 others. Each costs a connection and its own BEGIN, and the pool is ten.
 
-The deeper fix is to stop needing eighteen round trips, either by merging reads
-into single statements or by giving the driver a path that pipelines. That is
-HRT-448, and it is worth more than anything else in this file: it is a tax on
-every screen, not on this one.
+**And then (HRT-448), the reads themselves.** `personTimeline` was the longest
+single chain on the panel at 464ms, because it asked seven tables one after
+another. The five that no permission gates are now one union, and the two that
+are gated keep a query of their own with the gate as a line of TypeScript
+beside it, which is the property the old shape was protecting.
+
+```
+personTimeline   464ms -> 282ms      7 round trips -> 3
+```
+
+That on its own moved the panel by nothing, which is worth writing down: the
+timeline had stopped being the slowest group, and a screen waits for its
+slowest group and not for its total. So the groups were evened out again, the
+church's own lists folded into the record lookup that was already open and
+waiting on a round trip anyway, and the longest group split in two.
+
+```
+press to record on screen
+  one transaction, eighteen reads   2366ms
+  four transactions (HRT-447)       1871ms
+  rebalanced, timeline merged       1394ms median
+```
+
+Two lessons for the next one. **Measure the slowest group, not the total**, or
+an optimisation lands on something nobody was waiting for. And **the number of
+transactions is a real cost**: each is a connection and about 180ms of BEGIN,
+`set_config` and COMMIT, against a pool of ten, so splitting is worth it only
+while the groups are uneven.
+
+The same merge is available anywhere a repository function asks several
+questions in a row. Reach for it where a screen is slow, and check first that
+nothing being merged carries a permission gate of its own: that is the property
+the old shape of `personTimeline` was protecting, and it is why the two gated
+sources still have a query each.

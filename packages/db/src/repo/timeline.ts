@@ -6,22 +6,29 @@
  * happened with this person. A pastor opening a record before a visit wants the
  * last year on one screen, not six cards to piece together.
  *
- * Built by asking each source for its own rows and merging them by day, rather
- * than by a union in SQL. Each source has its own permission gate, and a union
- * would have to carry all of them in one WHERE clause where a mistake is quiet.
- * Here a gate is a line of TypeScript next to the query it guards.
+ * HRT-448. The sources no permission gates are read as one union, and every
+ * gated source keeps a query of its own.
+ *
+ * It used to be one query per source, seven round trips, on the reasoning that
+ * a union would have to carry every permission gate in one WHERE clause where
+ * a mistake is quiet. That reasoning still holds and is why this is split the
+ * way it is rather than merged outright: background checks and notes are gated,
+ * so each keeps its own query with its gate as a line of TypeScript beside it.
+ * The five ungated sources had no gate to lose and cost five round trips.
+ *
+ * Why it is worth doing: the application reaches Postgres through a transaction
+ * pooler, which does not pipeline. Every statement is a full round trip of
+ * about 60ms whether it is issued alone or inside a `Promise.all`, so the only
+ * thing that makes a screen faster is asking fewer times. Measured in
+ * docs/performance.md.
  *
  * Giving (0.3), serving (0.4) and communications (1.0) are not built yet. Each
  * one is another block in this file when it lands, and the shape is ready for
  * them: a kind, a day, a name from the church's records, and a gate.
  */
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import type { Tx } from "../client";
 import type { Permission } from "../permissions";
-import { groupMemberships, groups, groupTypes } from "../schema/groups";
-import { milestones } from "../schema/members";
-import { members } from "../schema/members";
-import { pipelineEntries, pipelines, followUps } from "../schema/followups";
 import { backgroundChecks } from "../schema/members";
 import { type TenantRole } from "../roles";
 import { listNotesForPerson } from "./notes";
@@ -98,81 +105,102 @@ export async function personTimeline(
   const day = dayIn(opts.timezone || "UTC");
   const out: TimelineEntry[] = [];
 
-  const [person] = await db
-    .select({
-      createdAt: members.createdAt,
-      archivedAt: members.archivedAt,
-      firstVisitOn: members.firstVisitOn,
-      membershipDate: members.membershipDate,
-    })
-    .from(members)
-    .where(eq(members.id, memberId))
-    .limit(1);
-  if (!person) return [];
-
-  // The day the church first wrote them down.
-  const added = day(person.createdAt);
-  if (added) out.push({ id: `added:${memberId}`, kind: "added", on: added });
-  if (person.archivedAt) {
-    out.push({ id: `archived:${memberId}`, kind: "archived", on: day(person.archivedAt)! });
-  }
-
   /*
-   * R7.x, R8.x. Attendance and check-ins are deliberately absent.
+   * R2.15, HRT-448. Five sources, one statement, one round trip.
    *
-   * A family at two services a weekend puts a hundred identical lines a year in
-   * front of the pastor reading this before a visit, and buries the four that
-   * matter. How often somebody comes is a question the attendance screens
-   * answer properly, with trends rather than with a list.
+   * Nothing here is gated, so nothing is hidden by merging it: the person's
+   * own dates, the groups they joined and left, their milestones, the
+   * pipelines they entered and came out of, and the follow-ups somebody
+   * answered. Every row is scoped to this member, and RLS scopes it to this
+   * church on the connection, which is the boundary this was always resting
+   * on rather than on the number of statements.
+   *
+   * The day is worked out in the database, on the church's own clock, because
+   * splitting the conversion between SQL and JavaScript is how an evening's
+   * work ends up filed under the next morning.
    */
+  const zone = opts.timezone || "UTC";
+  const rows = await db.execute<{
+    id: string; kind: string; on: string;
+    subject: string | null; hue: string | null; code: string | null; detail: string | null;
+  }>(sql`
+    with person as (
+      select id, created_at, archived_at from members where id = ${memberId}
+    )
+    select 'added:' || p.id as id, 'added' as kind,
+           (p.created_at at time zone ${zone})::date::text as "on",
+           null::text as subject, null::text as hue, null::text as code, null::text as detail
+      from person p
+     where p.created_at is not null
 
-  // R9.4. Joining a group, and leaving one. Two entries from one row, because
-  // they happened on different days and both belong in the order.
-  const memberships = await db
-    .select({
-      id: groupMemberships.id,
-      joinedOn: groupMemberships.joinedOn,
-      leftOn: groupMemberships.leftOn,
-      name: groups.name,
-      hue: groupTypes.hue,
-    })
-    .from(groupMemberships)
-    .innerJoin(groups, eq(groups.id, groupMemberships.groupId))
-    .leftJoin(groupTypes, eq(groupTypes.id, groups.typeId))
-    .where(eq(groupMemberships.memberId, memberId))
-    .limit(limit);
-  for (const row of memberships) {
-    if (row.joinedOn) {
-      out.push({
-        id: `joined:${row.id}`, kind: "joinedGroup", on: row.joinedOn,
-        subject: row.name, hue: row.hue,
-      });
-    }
-    if (row.leftOn) {
-      out.push({
-        id: `left:${row.id}`, kind: "leftGroup", on: row.leftOn,
-        subject: row.name, hue: row.hue,
-      });
-    }
-  }
+    union all
+    select 'archived:' || p.id, 'archived',
+           (p.archived_at at time zone ${zone})::date::text,
+           null, null, null, null
+      from person p
+     where p.archived_at is not null
 
-  // R2.6. Baptism, membership, a wedding. The spine of a person's story here.
-  const marks = await db
-    .select({
-      id: milestones.id,
-      on: milestones.occurredOn,
-      kind: milestones.kind,
-      note: milestones.notes,
-    })
-    .from(milestones)
-    .where(eq(milestones.memberId, memberId))
-    .orderBy(desc(milestones.occurredOn))
-    .limit(limit);
-  for (const row of marks) {
+    union all
+    select 'joined:' || gm.id, 'joinedGroup', gm.joined_on::text,
+           g.name, gt.hue, null, null
+      from group_memberships gm
+      join groups g on g.id = gm.group_id
+      left join group_types gt on gt.id = g.type_id
+     where gm.member_id = ${memberId} and gm.joined_on is not null
+
+    union all
+    select 'left:' || gm.id, 'leftGroup', gm.left_on::text,
+           g.name, gt.hue, null, null
+      from group_memberships gm
+      join groups g on g.id = gm.group_id
+      left join group_types gt on gt.id = g.type_id
+     where gm.member_id = ${memberId} and gm.left_on is not null
+
+    union all
+    select 'milestone:' || m.id, 'milestone', m.occurred_on::text,
+           null, null, m.kind::text, m.notes
+      from milestones m
+     where m.member_id = ${memberId}
+
+    union all
+    select 'pipeline:' || pe.id, 'enteredPipeline', pe.started_on::text,
+           pl.name, pl.hue, null, null
+      from pipeline_entries pe
+      join pipelines pl on pl.id = pe.pipeline_id
+     where pe.member_id = ${memberId} and pe.started_on is not null
+
+    union all
+    select 'pipelineOut:' || pe.id, 'leftPipeline',
+           (pe.closed_at at time zone ${zone})::date::text,
+           pl.name, pl.hue, null, null
+      from pipeline_entries pe
+      join pipelines pl on pl.id = pe.pipeline_id
+     where pe.member_id = ${memberId} and pe.closed_at is not null
+
+    union all
+    select 'followUp:' || f.id, 'followUpDone',
+           (f.done_at at time zone ${zone})::date::text,
+           f.title, null, null, f.outcome
+      from follow_ups f
+     where f.member_id = ${memberId} and f.done_at is not null
+
+    order by 3 desc, 1
+    limit ${limit}`);
+
+  /* A member who is not there has no rows at all, and the caller reads an
+     empty record rather than one with somebody else's history in it. */
+  if (rows.length === 0) return [];
+
+  for (const row of rows) {
     out.push({
-      id: `milestone:${row.id}`, kind: "milestone", on: row.on,
-      code: row.kind, detail: row.note,
-    });
+      id: row.id,
+      kind: row.kind as TimelineEntry["kind"],
+      on: row.on,
+      ...(row.subject === null ? {} : { subject: row.subject }),
+      ...(row.hue === null ? {} : { hue: row.hue }),
+      ...(row.code === null ? {} : { code: row.code }),
+      ...(row.detail === null ? {} : { detail: row.detail }),
+    } as TimelineEntry);
   }
 
   // R2.7, R6.2. Notes come through the notes repo rather than off the table,
@@ -195,52 +223,6 @@ export async function personTimeline(
       on: day(note.createdAt)!,
       detail: note.body ?? null,
       code: note.classification,
-    });
-  }
-
-  // R5.3. Entering a pipeline, and coming out of the other end of it.
-  const entries = await db
-    .select({
-      id: pipelineEntries.id,
-      startedOn: pipelineEntries.startedOn,
-      closedAt: pipelineEntries.closedAt,
-      name: pipelines.name,
-      hue: pipelines.hue,
-    })
-    .from(pipelineEntries)
-    .innerJoin(pipelines, eq(pipelines.id, pipelineEntries.pipelineId))
-    .where(eq(pipelineEntries.memberId, memberId))
-    .limit(limit);
-  for (const row of entries) {
-    out.push({
-      id: `pipeline:${row.id}`, kind: "enteredPipeline", on: row.startedOn,
-      subject: row.name, hue: row.hue,
-    });
-    if (row.closedAt) {
-      out.push({
-        id: `pipelineOut:${row.id}`, kind: "leftPipeline", on: day(row.closedAt)!,
-        subject: row.name, hue: row.hue,
-      });
-    }
-  }
-
-  // R5.5. A follow-up somebody answered. The outcome is the thing worth having
-  // six months later, so it is the detail rather than the title.
-  const done = await db
-    .select({
-      id: followUps.id,
-      at: followUps.doneAt,
-      title: followUps.title,
-      outcome: followUps.outcome,
-    })
-    .from(followUps)
-    .where(and(eq(followUps.memberId, memberId), isNotNull(followUps.doneAt)))
-    .orderBy(desc(followUps.doneAt))
-    .limit(limit);
-  for (const row of done) {
-    out.push({
-      id: `followUp:${row.id}`, kind: "followUpDone", on: day(row.at)!,
-      subject: row.title, detail: row.outcome,
     });
   }
 
