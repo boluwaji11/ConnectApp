@@ -69,6 +69,12 @@ jobs:
       - name: Every email we send (R16.4)
         run: pnpm --filter @connectapp/mail test
 
+      # HRT-461. The faces are committed rather than fetched at build time, so
+      # a family added to scripts/fonts.mjs without running it would render as
+      # a fallback in production and nowhere else.
+      - name: Every face named has files
+        run: pnpm fonts:check
+
       - name: Every shipped requirement has a story
         run: node scripts/check-backlog.mjs
 

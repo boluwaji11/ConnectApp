@@ -1,69 +1,15 @@
-import {
-  Atkinson_Hyperlegible_Next,
-  Fraunces,
-  Inter,
-  IBM_Plex_Mono,
-  IBM_Plex_Serif,
-  JetBrains_Mono,
-  Source_Sans_3,
-  Source_Serif_4,
-} from "next/font/google";
 import { CodeDisplay } from "@connectapp/ui";
 import { PageTitle, Section } from "@/components/section";
 
 /** The gallery is a tool for us, so it names itself plainly. */
 export const metadata = { title: "Design · type" };
 
-const sourceSans = Source_Sans_3({
-  subsets: ["latin"],
-  weight: "variable",
-  display: "swap",
-  preload: false,
-});
-const sourceSerif = Source_Serif_4({
-  subsets: ["latin"],
-  weight: "variable",
-  display: "swap",
-  preload: false,
-});
-const plexSerif = IBM_Plex_Serif({
-  subsets: ["latin"],
-  weight: ["400", "600"],
-  display: "swap",
-  preload: false,
-});
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: "400",
-  display: "swap",
-  preload: false,
-});
-const atkinson = Atkinson_Hyperlegible_Next({
-  subsets: ["latin"],
-  weight: "variable",
-  display: "swap",
-  preload: false,
-  adjustFontFallback: false,
-});
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  weight: ["400", "600"],
-  display: "swap",
-  preload: false,
-});
-const inter = Inter({
-  subsets: ["latin"],
-  weight: "variable",
-  display: "swap",
-  preload: false,
-});
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  display: "swap",
-  preload: false,
-});
-
+/*
+ * The faces are served from `public/fonts` and named in `app/fonts.css`, so a
+ * family is set by its own name here rather than through a loader. The two
+ * this screen alone reaches, Atkinson Hyperlegible Next and JetBrains Mono,
+ * are in `scripts/fonts.mjs` for that reason.
+ */
 const FONT_OPTIONS = [
   {
     name: "IBM Plex",
@@ -75,29 +21,29 @@ const FONT_OPTIONS = [
   {
     name: "Source",
     description: "Source Sans 3 · Source Serif 4 · IBM Plex Mono",
-    sans: sourceSans.style.fontFamily,
-    serif: sourceSerif.style.fontFamily,
-    mono: plexMono.style.fontFamily,
+    sans: '"Source Sans 3", sans-serif',
+    serif: '"Source Serif 4", serif',
+    mono: '"IBM Plex Mono", monospace',
   },
   {
     name: "Fraunces / Inter",
     description: "Fraunces · Inter · JetBrains Mono",
-    sans: inter.style.fontFamily,
-    serif: fraunces.style.fontFamily,
-    mono: jetbrainsMono.style.fontFamily,
+    sans: '"Inter", sans-serif',
+    serif: '"Fraunces", serif',
+    mono: '"JetBrains Mono", monospace',
   },
   {
     name: "Atkinson",
     description: "Atkinson Hyperlegible Next · IBM Plex Serif · IBM Plex Mono",
-    sans: atkinson.style.fontFamily,
-    serif: plexSerif.style.fontFamily,
-    mono: plexMono.style.fontFamily,
+    sans: '"Atkinson Hyperlegible Next", sans-serif',
+    serif: '"IBM Plex Serif", serif',
+    mono: '"IBM Plex Mono", monospace',
   },
   {
     name: "System",
     description: "System sans · IBM Plex Serif · system mono",
     sans: "system-ui, sans-serif",
-    serif: plexSerif.style.fontFamily,
+    serif: '"IBM Plex Serif", serif',
     mono: "ui-monospace, SFMono-Regular, monospace",
   },
 ] as const;

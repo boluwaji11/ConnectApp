@@ -1162,6 +1162,7 @@ of money and after everything else.
 | HRT-459 | The demo banner says it is a demo and sells nothing | R19.7 | Resolved |
 | HRT-460 | Every screen, both engines, with the presses: scripts/sweep.mjs | R24.11 | Resolved |
 | HRT-458 | A per-visitor ceiling on the demo, generous enough nobody meets it | R19.7 | Open |
+| HRT-461 | The faces are in the repository, so no build waits on Google | R21.x, R24.6 | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |

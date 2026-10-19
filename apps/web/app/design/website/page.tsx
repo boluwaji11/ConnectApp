@@ -3,7 +3,6 @@ import {
   shortPairs, type Palette,
 } from "@connectapp/db/rules";
 import { PageTitle, Section } from "@/components/section";
-import { SITE_FONT_CLASS } from "@/components/church-site/fonts";
 import { PAIRINGS, SITE_PRESETS, themeStyle } from "@/components/church-site/theme";
 
 /** The gallery is a tool for us, so it names itself plainly. */
@@ -119,7 +118,7 @@ export default function WebsiteDesign() {
         title="Faces"
         note="Six pairings. A church sets one, and only its two families are served."
       >
-        <div className={`${SITE_FONT_CLASS} grid gap-6 sm:grid-cols-2 lg:grid-cols-3`}>
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {SITE_PAIRINGS.map((key) => (
             <div
               key={key}
@@ -156,7 +155,7 @@ export default function WebsiteDesign() {
             return (
               <div
                 key={preset.key}
-                className={`${SITE_FONT_CLASS} overflow-hidden rounded-lg border border-line`}
+                className="overflow-hidden rounded-lg border border-line"
                 style={{
                   ...themeStyle({ ...preset.theme, colors: {} }),
                   background: palette.bg,

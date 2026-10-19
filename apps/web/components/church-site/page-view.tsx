@@ -10,7 +10,6 @@
 
 import * as React from "react";
 import type { SiteDoc, SitePage, SiteSection } from "@connectapp/db/rules";
-import { SITE_FONT_CLASS } from "./fonts";
 import { themeStyle } from "./theme";
 import { SECTION_VIEWS } from "./registry";
 import { SiteFooterView, SiteHeaderView } from "./header";
@@ -50,7 +49,7 @@ export function SiteFrame({
   return (
     <Tag
       className={
-        `${SITE_FONT_CLASS} site-root bg-[var(--s-bg)] font-[family-name:var(--s-body)]`
+        `site-root bg-[var(--s-bg)] font-[family-name:var(--s-body)]`
         + ` text-[length:var(--s-text)] text-[var(--s-ink)] ${className}`
       }
       style={themeStyle(doc.theme)}

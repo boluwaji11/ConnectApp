@@ -232,7 +232,9 @@ the platform one voice across headings, working screens, and the codes volunteer
 | UI and body | **IBM Plex Sans** variable | Everything functional. Tabular figures enabled for tables and currency. |
 | Mono | **IBM Plex Mono** | **Security codes, giving amounts in tables, batch totals.** Codes stay monospaced and the character pairs remain easy to distinguish when read aloud. |
 
-Self-hosted through `next/font`. No render-blocking third party font request, no layout shift.
+Served from the app's own `public/fonts`, put there by `scripts/fonts.mjs`. No render-blocking
+third party font request. Noto Color Emoji is the one exception and is linked from Google, because
+it is several megabytes of numbered chunks; `apps/web/app/fonts-emoji.ts` says why.
 
 ### Scale
 
@@ -376,7 +378,7 @@ durations rather than reinventing them.
 | Components | **shadcn/ui** on **Radix primitives**. Accessible focus management, keyboard behaviour, and ARIA that we do not have to get right ourselves. Copied in and owned, not a dependency we cannot edit. |
 | Icons | **Lucide** |
 | Motion | **Motion** for components, **View Transitions API** for routes |
-| Fonts | IBM Plex Serif, IBM Plex Sans, IBM Plex Mono, self-hosted via `next/font` |
+| Fonts | IBM Plex Serif, IBM Plex Sans, IBM Plex Mono, served from `public/fonts` |
 | Charts | Minimal, one accent colour, no gradients, no 3D, direct labels over legends where they fit |
 | Forms | React Hook Form plus Zod, with the same schema validating on the server |
 | Tables | TanStack Table, virtualised above 200 rows |

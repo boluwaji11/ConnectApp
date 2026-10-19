@@ -2,58 +2,13 @@ import type { Metadata, Viewport } from "next";
 import { redirect } from "next/navigation";
 import { documentTheme } from "@/lib/theme";
 import { canonicalAddress } from "@/lib/church-address";
-import {
-  IBM_Plex_Mono,
-  IBM_Plex_Sans,
-  IBM_Plex_Serif,
-  Noto_Color_Emoji,
-} from "next/font/google";
 import { TooltipProvider } from "@connectapp/ui";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
+import { PRELOAD_FONTS } from "./fonts-preload";
+import { EMOJI_HREF } from "./fonts-emoji";
 import { SandboxBanner, sandbox } from "@/components/sandbox-banner";
-
-/**
- * IBM Plex across display, UI and codes. Self-hosted, no layout shift.
- */
-const display = IBM_Plex_Serif({
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "600"],
-  variable: "--font-ibm-plex-serif",
-  display: "swap",
-});
-const sans = IBM_Plex_Sans({
-  subsets: ["latin", "latin-ext"],
-  weight: "variable",
-  variable: "--font-ibm-plex-sans",
-  display: "swap",
-});
-const mono = IBM_Plex_Mono({
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500"],
-  variable: "--font-ibm-plex-mono",
-  display: "swap",
-  preload: false,
-});
-
-/**
- * R16.9. One set of emoji, whoever is reading.
- *
- * Left to the machine, a mark against a message is drawn by Apple on one
- * desk, by Microsoft on the next and by a 2010 clip-art set on an old Windows
- * build, so the same thumbs up is three different pictures and two of them
- * date the product. Noto is flat, current, and the same on every screen.
- *
- * Only the characters that need it use it: the body text keeps IBM Plex Sans.
- */
-const emoji = Noto_Color_Emoji({
-  subsets: ["emoji"],
-  weight: "400",
-  variable: "--font-emoji",
-  display: "swap",
-  preload: false,
-});
 
 export const metadata: Metadata = {
   title: "ConnectApp",
@@ -101,11 +56,24 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       {...(attr ? { "data-theme": attr } : {})}
       suppressHydrationWarning
     >
+      <head>
+        {/*
+         * The faces every screen sets, asked for before the stylesheet that
+         * names them is parsed. `crossOrigin` is required even same-origin:
+         * a font is fetched in CORS mode, and a preload without it is
+         * fetched a second time rather than reused.
+         */}
+        {PRELOAD_FONTS.map((href) => (
+          <link key={href} rel="preload" as="font" type="font/woff2" href={href} crossOrigin="anonymous" />
+        ))}
+        {/* R16.9. See app/fonts-emoji.ts for why this one is not local. */}
+        <link rel="stylesheet" href={EMOJI_HREF} />
+      </head>
       <body
         /* HRT-402. Outside production, the bar below is drawn and the
            viewport-height utilities give its height back. */
         data-env-bar={sandbox() ? "" : undefined}
-        className={`${display.variable} ${sans.variable} ${mono.variable} ${emoji.variable} font-sans`}
+        className="font-sans"
       >
         {/* HRT-402. Outside production, every screen says so. */}
         <SandboxBanner />

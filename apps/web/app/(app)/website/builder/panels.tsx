@@ -41,7 +41,6 @@ import {
   PAIRINGS, PALETTES, SITE_PRESETS, paletteFor, themeStyle, type SitePreset,
 } from "@/components/church-site/theme";
 import { keyUrl, mediaUrl } from "@/components/church-site/kit";
-import { SITE_FONT_CLASS } from "@/components/church-site/fonts";
 import { dateAndTime } from "@/lib/dates";
 import { ColourPicker } from "./colour-picker";
 import type { BuilderApi, MediaItem } from "./api";
@@ -495,7 +494,7 @@ const HEX = /^#?[0-9a-fA-F]{6}$/;
 function Mini({ theme, label }: { theme: SiteTheme; label: string }) {
   return (
     <span
-      className={`${SITE_FONT_CLASS} block overflow-hidden rounded-[10px] border border-line`}
+      className="block overflow-hidden rounded-[10px] border border-line"
       style={themeStyle(theme)}
     >
       <span className="block bg-[var(--s-bg)] px-2.5 py-3">
@@ -733,7 +732,7 @@ export function DesignPanel({
             const pairing = PAIRINGS[key];
             return (
               <Pick key={key} chosen={theme.fonts === key} onPress={() => set({ fonts: key })}>
-                <span className={`${SITE_FONT_CLASS} block`}>
+                <span className="block">
                   <span
                     className="block text-[17px] leading-snug text-fg"
                     style={{
