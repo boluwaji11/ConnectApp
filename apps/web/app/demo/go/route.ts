@@ -1,5 +1,5 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { createDemoChurch } from "@connectapp/db";
+import { NextResponse, after, type NextRequest } from "next/server";
+import { createDemoChurch, topUpDemoPool } from "@connectapp/db";
 import { issueDemoPass, newDemoUserId } from "@/lib/demo-pass";
 import { backTo, isDemoHost } from "@/lib/demo-host";
 
@@ -61,6 +61,22 @@ export async function GET(request: NextRequest) {
   const userId = newDemoUserId();
   const demo = await createDemoChurch(userId);
   await issueDemoPass(demo.tenantId, userId, demo.expiresAt);
+
+  /*
+   * HRT-462. The copy this visitor took is replaced after they have been
+   * answered, not before. Refilling costs about a second of database work per
+   * church, and a second spent here is a second the visitor spends looking at
+   * nothing.
+   */
+  after(async () => {
+    try {
+      await topUpDemoPool();
+    } catch {
+      /* The next visitor or the nightly run refills it. A pool one short
+         costs somebody a copy they wait for; a throw here would be an
+         unhandled rejection in a request that has already answered. */
+    }
+  });
 
   /* Built from the host the visitor arrived on. A redirect to the bare
      product is a redirect to somewhere their new pass is not sent. */

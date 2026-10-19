@@ -295,17 +295,32 @@ whatever was pushed twenty minutes ago.
 Every visitor gets a copy of one template church. The template is built by the
 loader, which inserts a row at a time through the repo functions the product
 uses, so the demo cannot drift into showing something the product does not do.
-That takes about forty seconds, which is why nobody waits for it: the copy is
-about a second.
+That takes between forty seconds and two minutes depending on how far the
+database is, which is why nobody waits for it.
+
+**Copies stand ready.** HRT-462. Three of them, and a visitor is handed one with
+a single statement: 286ms against the development database, against 1012ms to
+make a copy while they wait. The pool refills after the visitor has been
+answered rather than before, through Next's `after()`, and the nightly run fills
+it from the template it has just built. Where the pool is empty a copy is made
+on the spot, which is the old behaviour and still the floor.
 
 | | |
 |---|---|
 | Build the template | `pnpm --filter @connectapp/db demo:template --rebuild` |
-| Build it on a deployment | `curl -H "Authorization: Bearer $CRON_SECRET" https://connectapp.church/api/demo/refresh` |
+| Build it by hand, and fill the pool | `curl -H "Authorization: Bearer $CRON_SECRET" https://connectapp.church/api/demo/refresh` |
 | Rebuilt nightly by | `.github/workflows/demo.yml`, 09:00 UTC |
 | Where it answers | `NEXT_PUBLIC_DEMO_HOST`, unset in production and `demo.dev.connectapp.church` on Preview |
 | What signs the pass | `DEMO_PASS_SECRET`. Unset, it is derived from `NOTE_ENCRYPTION_KEY` rather than borrowing it, so the two never share a value. Set one per environment. |
 | On the development deployment | Behind the team gate, like every other address there. Production is open on arrival. |
+
+**The template is either absent or complete.** HRT-462. It is built under a
+working name and takes `demo-template` in one statement at the end, because the
+build is not one transaction: the church's row is written before the loader
+starts, and a build killed part way under the real name left a template with
+nothing in it, which every later copy then showed a visitor. The nightly rebuild
+keeps the standing template under a name nothing looks for until the new one is
+built, so a rebuild that fails leaves yesterday's demo rather than none.
 
 **It is rebuilt nightly because a copy carries the dates it was built with.**
 The seed is written against the day it runs: a service happening today,

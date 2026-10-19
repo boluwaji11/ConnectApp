@@ -1162,6 +1162,7 @@ of money and after everything else.
 | HRT-460 | Every screen, both engines, with the presses: scripts/sweep.mjs | R24.11 | Resolved |
 | HRT-458 | A per-visitor ceiling on the demo, generous enough nobody meets it | R19.7 | Open |
 | HRT-461 | The faces are in the repository, so no build waits on Google | R21.x, R24.6 | Resolved |
+| HRT-462 | The demo opens on a church that is already standing | R19.7, R22.1 | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |
@@ -2194,6 +2195,46 @@ The directory and the composer already drew numbers, through a different control
 same job, and the two disagreed about what to draw. Both take the row from one place now, which is
 `pageTokens` in the design system, under test: seven slots at most, the first and the last always
 there, the current one and its neighbours, and a gap where a run is left out.
+
+### HRT-462, how to test it
+
+A visitor pressing "See demo" waited while a church was copied for them. The copy
+is not slow (529ms warm against the development database, measured 19 October), but
+it is work nobody needs to watch, and it is the first thing a church sees of this
+product.
+
+Copies stand ready instead. A claim is one statement, `for update skip locked`, so
+two visitors arriving together take two different churches. Measured against the
+development database: **286ms to claim a standing copy against 1012ms to copy one**,
+and the copy path remains as the answer when the pool is empty.
+
+1. Open `connectapp.church` and press **See demo**. The product should be on screen
+   without a pause worth noticing, with Fairview Church's members, giving and diary
+   in it, and the setup guide away.
+2. Press it again from a fresh browser profile, twice more. Each visit is its own
+   church: change a member's name in one and the other does not have it.
+3. Leave it a minute and open it again. The pool refills after a visitor has been
+   answered, not before, so the fourth visit is as quick as the first.
+
+**What else this fixed, and it is the part that matters more than the milliseconds.**
+The template every copy is made from was built in the request if it was missing, and
+that build takes 107 seconds against a database 30ms away. `/demo/go` sets no
+`maxDuration`, so the build is killed part way, and the church's own row was written
+before the loader started: a killed build left `demo-template` standing with nothing
+in it, and every copy taken from it afterwards showed a visitor an empty product. The
+nightly rebuild had the same shape in reverse, deleting the template before building
+its replacement, so a rebuild that failed left no template for the day.
+
+The template is now built under a working name and takes `demo-template` in one
+statement at the end, and the rebuild keeps the old one under a name nothing looks
+for until the new one is standing. `demo-template` is either absent or complete.
+
+Found while measuring: `cloneTenant` throws on `stripe_account_id_unique` when the
+source church has a Stripe account, because that column is not in the override list
+the way `portal_name` is. The demo template has no Stripe account so nothing hits
+it today. Its own retry runs inside the aborted transaction, so the message it
+produces is always "current transaction is aborted" and the real error is lost.
+Both want a story of their own.
 
 ### HRT-362, how to test it
 

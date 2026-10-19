@@ -1,6 +1,8 @@
 import { bearerHolds } from "@connectapp/db";
 import { NextResponse, type NextRequest } from "next/server";
-import { rebuildDemoTemplate, sweepExpiredDemos } from "@connectapp/db";
+import {
+  discardUnclaimedDemos, rebuildDemoTemplate, sweepExpiredDemos, topUpDemoPool,
+} from "@connectapp/db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,7 +33,19 @@ export async function GET(request: NextRequest) {
   /* Copies already handed out are left alone: somebody is looking at one. They
      go when they run out, the way they always did. */
   const swept = await sweepExpiredDemos();
-  const tenantId = await rebuildDemoTemplate();
 
-  return NextResponse.json({ rebuilt: tenantId, swept, tookMs: Date.now() - at });
+  /*
+   * HRT-462. The standing copies go before the template they were made from,
+   * because a copy carries the dates it was built with and this route exists
+   * precisely because those dates go stale. Then the pool is filled again from
+   * the template just built, so the first visitor of the day is handed one
+   * rather than waiting for one.
+   */
+  const discarded = await discardUnclaimedDemos();
+  const tenantId = await rebuildDemoTemplate();
+  const pooled = await topUpDemoPool();
+
+  return NextResponse.json({
+    rebuilt: tenantId, swept, discarded, pooled, tookMs: Date.now() - at,
+  });
 }

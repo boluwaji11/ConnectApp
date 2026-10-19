@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { owner, withTenant, closeConnections } from "../src/client";
 import {
   createDemoChurch, demoChurchInfo, sweepExpiredDemos, rebuildDemoTemplate,
+  demoPoolDepth, discardUnclaimedDemos, topUpDemoPool,
 } from "../src/demo/church";
 import { DEMO_PEOPLE } from "../src/demo/members";
 import { listPeople } from "../src/repo/members";
@@ -190,11 +191,73 @@ describe.skip("a demo pass", () => {
  * on the suite.
  */
 /**
- * The pool is gone. A copy of the template takes about half a second, so there
- * is nothing to keep warm: the suite that proved churches were built in
- * advance was proving a mechanism that no longer exists. What replaced it is
- * covered by `clone.test.ts`, which proves a copy holds what it came from.
+ * HRT-462. The pool is back, because a copy is not free.
+ *
+ * A copy of the template costs about a second against the development
+ * database, and a visitor who has just pressed "See demo" spends that second
+ * looking at nothing. Copies stand ready instead and a claim is one statement.
+ *
+ * These work on every demo church at once, so they live in this file rather
+ * than their own: a second file doing the same thing at the same time would be
+ * pulling the rug out from under this one.
  */
+describe("the pool", () => {
+  it("hands over a copy that was already standing", async () => {
+    await discardUnclaimedDemos();
+    expect(await topUpDemoPool(1)).toBe(1);
+    expect((await demoPoolDepth()).standing).toBe(1);
+
+    const demo = await createDemoChurch(randomUUID());
+    made.push(demo.tenantId);
+
+    /* Taken from the pool rather than copied, so nothing is standing after. */
+    expect((await demoPoolDepth()).standing).toBe(0);
+
+    /* A claimed copy is openable, which an unclaimed one is not: the expiry is
+       moved to a day out and the visitor is its only member. */
+    const standing = await demoChurchInfo(demo.tenantId);
+    expect(standing.isDemo).toBe(true);
+    expect(demo.expiresAt.getTime()).toBeGreaterThan(Date.now());
+  }, 300_000);
+
+  it("gives two visitors arriving at once different churches", async () => {
+    await discardUnclaimedDemos();
+    await topUpDemoPool(2);
+
+    const [first, second] = await Promise.all([
+      createDemoChurch(randomUUID()),
+      createDemoChurch(randomUUID()),
+    ]);
+    made.push(first.tenantId, second.tenantId);
+
+    expect(first.tenantId).not.toBe(second.tenantId);
+  }, 300_000);
+
+  it("builds one while the visitor waits when nothing is standing", async () => {
+    await discardUnclaimedDemos();
+    expect((await demoPoolDepth()).standing).toBe(0);
+
+    const demo = await createDemoChurch(randomUUID());
+    made.push(demo.tenantId);
+
+    expect((await demoChurchInfo(demo.tenantId)).isDemo).toBe(true);
+  }, 300_000);
+
+  it("throws away what nobody took and leaves what somebody has", async () => {
+    await discardUnclaimedDemos();
+    await topUpDemoPool(1);
+    const held = await createDemoChurch(randomUUID());
+    made.push(held.tenantId);
+    await topUpDemoPool(2);
+
+    const discarded = await discardUnclaimedDemos();
+
+    expect(discarded).toBe(2);
+    expect((await demoPoolDepth()).standing).toBe(0);
+    /* The claimed one is somebody's screen right now. */
+    expect((await demoChurchInfo(held.tenantId)).isDemo).toBe(true);
+  }, 300_000);
+});
 
 describe("what a demo copy looks like on arrival", () => {
   /*

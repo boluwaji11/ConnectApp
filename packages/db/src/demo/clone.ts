@@ -159,6 +159,15 @@ export interface CloneInto {
   /** Left as it is on the template when not given. */
   timezone?: string;
   demoExpiresAt?: Date | null;
+  /**
+   * HRT-462. Stamps the copy as taken in the same statement that makes it.
+   *
+   * A copy with an expiry and no claim is a copy the pool may hand to the next
+   * visitor. Where a copy is being made for somebody who is already waiting,
+   * stamping it afterwards leaves a moment in which a second visitor could be
+   * given the same church, so it is stamped here instead.
+   */
+  demoClaimedAt?: Date | null;
 }
 
 /**
@@ -205,6 +214,7 @@ export async function cloneTenant(fromTenantId: string, into: CloneInto): Promis
       slug: "$1::text",
       name: "$2::text",
       demo_expires_at: "$3::timestamptz",
+      demo_claimed_at: "$6::timestamptz",
       created_at: "now()",
       updated_at: "now()",
       /* A copy cannot carry the template's web address: it is unique across
@@ -241,7 +251,10 @@ export async function cloneTenant(fromTenantId: string, into: CloneInto): Promis
        returning id`;
     const [made] = await tx.unsafe<{ id: string }[]>(
       churchStatement,
-      [into.slug, into.name, into.demoExpiresAt ?? null, into.timezone ?? null, fromTenantId],
+      [
+        into.slug, into.name, into.demoExpiresAt ?? null, into.timezone ?? null,
+        fromTenantId, into.demoClaimedAt ?? null,
+      ],
     ).catch((trouble: Error) => {
       throw new Error(`Copying the church row failed: ${trouble.message}\n${churchStatement}`);
     }) as { id: string }[];
