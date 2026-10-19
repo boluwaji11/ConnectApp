@@ -69,8 +69,21 @@ function warnIfDirectHost(url: string): void {
  *
  * A render holds a connection for about 90ms, so ten of them serve a church
  * many times over and an eleventh caller queues rather than failing.
+ *
+ * HRT-463. The owner pool was four, and four was too few to serve one screen.
+ * The portal's status screen issues five reads at once, each of which asks
+ * `platform_admins` before it asks its own question, which is ten queries
+ * from five callers. Against production that did not queue, it wedged: the
+ * same five finished in 294ms at ten and had not finished after 30 seconds at
+ * four. The owner connection carries no statement deadline, so nothing broke
+ * the wait, the function was killed at its limit, and the browser was handed
+ * a half-written page.
+ *
+ * Ten rather than four for the same reason the app pool is ten: in transaction
+ * mode an idle client holds nothing at the far end, so the cost of the six
+ * more is six sockets.
  */
-const POOL = { app: 10, owner: 4 } as const;
+const POOL = { app: 10, owner: 10 } as const;
 
 /** R21.5, R24.11. How long one statement may run before Postgres ends it. */
 const STATEMENT_BUDGET_MS = 15_000;

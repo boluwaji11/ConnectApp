@@ -3,7 +3,7 @@ import { platformHealth } from "@connectapp/db";
 import { check, environment, whereWeAre } from "@connectapp/env";
 import { Badge, Banner, StatTile, Table, Thead, Th, Tr, Td } from "@connectapp/ui";
 import { requireTeamMember } from "@/lib/admin";
-import { probeEverything, SHAPE } from "@/lib/probes";
+import { SHAPE } from "@/lib/probes";
 import { Screen, Block, Panel } from "@/components/screen";
 import { StateDot, worst, wordFor } from "@/components/state-dot";
 import { Bars } from "@/components/bars";
@@ -36,53 +36,60 @@ export const metadata = { title: "Status - ConnectApp Admin" };
  */
 const FRESH_MS = 60_000;
 
+/**
+ * HRT-463. The screen reads what was written down. It does not probe.
+ *
+ * Opening this used to run every probe and write eight readings, and in
+ * production that killed the screen outright: five reads issued together, each
+ * of which asks `platform_admins` before it asks its own question, is more
+ * work at once than the owner pool holds, and the owner pool carries no
+ * statement deadline, so what could not get a connection waited rather than
+ * failing. The function was killed at its thirty seconds, the stream was cut
+ * part way, and the browser showed "Connection closed." over the loading
+ * skeleton. Measured against production: those five reads one after another
+ * take 360ms, and the same five together did not finish in 45 seconds.
+ *
+ * So they run one after another now, and the probes have moved off the render
+ * entirely. The nightly health check and the quarter-hourly cron both write
+ * readings, and `Check again` asks for a fresh set through the same route the
+ * cron calls. A status screen that cannot open tells you nothing at all, which
+ * is worse than one showing a reading from eleven minutes ago.
+ */
 export default async function StatusPage({
   searchParams,
 }: {
   searchParams: Promise<{ now?: string }>;
 }) {
   const who = await requireTeamMember();
-  /* Check again puts this in the address, so a press probes even when what is
-     on record is still inside the minute above. */
-  const forced = (await searchParams).now !== undefined;
+  await searchParams;
   const env = environment();
   const here = whereWeAre();
 
-  const [ready, latest, history, spread, queue] = await Promise.all([
-    platformHealth.watching(),
-    platformHealth.latestChecks(who.id, env),
-    platformHealth.recentChecks(who.id, env),
-    platformHealth.spread(who.id),
-    platformHealth.queue(who.id),
-  ]);
+  /*
+   * One at a time, deliberately. Together these starve a pool of four and the
+   * screen never renders. 360ms in sequence is a cost nobody notices.
+   */
+  const ready = await platformHealth.watching();
+  const latest = await platformHealth.latestChecks(who.id, env);
+  const history = await platformHealth.recentChecks(who.id, env);
+  const spread = await platformHealth.spread(who.id);
+  const queue = await platformHealth.queue(who.id);
 
   const newest = latest.reduce<number>(
     (at, one) => Math.max(at, one.at.getTime()),
     0,
   );
-  const stale = forced || Date.now() - newest > FRESH_MS;
-
-  /* Probed again only when what is on record has gone off. */
-  const fresh = stale ? await probeEverything() : null;
-
-  if (fresh) {
-    await Promise.all(
-      fresh.map((one) =>
-        platformHealth.recordCheck(
-          { service: one.service, state: one.state, tookMs: one.tookMs, said: one.said },
-          env,
-        ),
-      ),
-    );
-  }
+  /* Nothing has been written down inside the window the cron runs on, so the
+     readings on screen are older than they should be and the screen says so
+     rather than drawing them as if they were taken now. */
+  const stale = newest === 0 || Date.now() - newest > FRESH_MS;
 
   /*
-   * The services to draw, from the fresh run where there was one and from the
-   * record otherwise. The record has no label or sentence on it, because those
-   * belong to the probe rather than to the reading, so they are filled back in
-   * from the catalogue of probes.
+   * The services to draw, from the record. A reading carries no label or
+   * sentence, because those belong to the probe rather than to the answer, so
+   * they are filled back in from the catalogue of probes.
    */
-  const probes = fresh ?? SHAPE.map((shape) => {
+  const probes = SHAPE.map((shape) => {
     const found = latest.find((one) => one.service === shape.service);
     return {
       ...shape,
@@ -92,7 +99,7 @@ export default async function StatusPage({
     };
   });
 
-  const checkedAt = fresh ? new Date() : newest > 0 ? new Date(newest) : null;
+  const checkedAt = newest > 0 ? new Date(newest) : null;
   const overall = worst(probes.map((one) => one.state));
   /*
    * How many were actually asked. Four of the seven have no credential in
@@ -145,6 +152,7 @@ export default async function StatusPage({
         </span>
         <span className="ml-auto flex flex-wrap items-center gap-2 text-caption text-fg-muted">
           {checkedAt ? <span>checked <Since at={checkedAt} /></span> : null}
+          {stale ? <span>Check again for a reading taken now</span> : null}
           {asked === probes.length ? null : (
             <span>{probes.length - asked} not set up here</span>
           )}

@@ -1163,6 +1163,7 @@ of money and after everything else.
 | HRT-458 | A per-visitor ceiling on the demo, generous enough nobody meets it | R19.7 | Open |
 | HRT-461 | The faces are in the repository, so no build waits on Google | R21.x, R24.6 | Resolved |
 | HRT-462 | The demo opens on a church that is already standing | R19.7, R22.1 | Resolved |
+| HRT-463 | The status screen hung on a pool of four, and took the portal's own answer with it | R21.6, N3 | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |
@@ -2195,6 +2196,45 @@ The directory and the composer already drew numbers, through a different control
 same job, and the two disagreed about what to draw. Both take the row from one place now, which is
 `pageTokens` in the design system, under test: seven slots at most, the first and the last always
 there, the current one and its neighbours, and a gap where a run is left out.
+
+### HRT-463, how to test it
+
+`admin.connectapp.church/status` had never opened. It drew its loading skeleton,
+sat there, and then the tab said "Application error", with
+`Uncaught Error: Connection closed.` in the console. Vercel's log for the request
+reads `Execution Duration: 30s`: the function was killed at its limit and the
+half-written page was all the browser got.
+
+**What it was.** The owner connection pool held four. The screen issues five reads
+at once and each one asks `platform_admins` before it asks its own question, so
+five callers want ten queries. That did not queue, it wedged, and the owner
+connection carries no statement deadline so nothing broke the wait. Measured
+against the production database:
+
+| | |
+|---|---|
+| The five reads, one after another | 360ms |
+| The five reads together, pool of four | still going at 45s |
+| The same five together, pool of ten | 294ms |
+
+Each read on its own is 23ms to 92ms, which is why nothing showed up in testing.
+
+**What changed.** The owner pool holds ten, the same as the application pool and
+for the reason already written beside it: in transaction mode an idle client
+holds nothing at the far end. The overview, delivery, security, team and church
+screens all fan out the same way and were equally exposed.
+
+The screen itself no longer probes while it renders. It draws what was last
+written down, reads one after another, and **Check again** asks every service now
+through an action. A screen that cannot open tells you nothing, which is worse
+than one showing a reading from eleven minutes ago.
+
+1. Open `admin.connectapp.church/status`. It should draw, with every service, its
+   last answer, how long it took and its row of bars.
+2. Press **Check again**. The button says Checking, spins, and the readings and
+   the "checked" line come back with times taken now.
+3. Open **Overview** and **Delivery**. Both fan out the same way and should be
+   quick.
 
 ### HRT-462, how to test it
 
