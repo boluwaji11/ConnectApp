@@ -14,6 +14,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { owner, closeConnections } from "../src/client";
+import { withAuditTriggersOff } from "../src/maintenance";
 import {
   platformAdmin, admins, grant, revoke, events, PlatformError,
   inviteTeamMember, teamInvites, revokeInvite, claimInvite, approve,
@@ -35,10 +36,18 @@ const CHURCH = "11111111-2222-4333-8444-bbbb00000001";
 
 async function clear(): Promise<void> {
   const ids = [FIRST, SECOND, OUTSIDER, "11111111-2222-4333-8444-aaaa00000004"];
-  await owner()`delete from platform_events where tenant_id = ${CHURCH}`;
+  /*
+   * HRT-435. `platform_events` is append only, enforced by a trigger that
+   * fires for the owner connection too. Clearing up after a test is the
+   * maintenance path rather than somebody tampering with the log, which is
+   * what the escape is for.
+   */
+  await withAuditTriggersOff(async (sql) => {
+    await sql`delete from platform_events where tenant_id = ${CHURCH}`;
+    await sql`delete from platform_events where actor_id in ${sql(ids)}`;
+  });
   await owner()`delete from tenants where id = ${CHURCH}`;
   await owner()`delete from platform_invites where email like 'platform-test-%'`;
-  await owner()`delete from platform_events where actor_id in ${owner()(ids)}`;
   await owner()`delete from platform_admins where user_id in ${owner()(ids)}`;
   await owner()`delete from app_users where id in ${owner()(ids)}`;
 }
