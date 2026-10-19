@@ -1155,6 +1155,7 @@ of money and after everything else.
 | HRT-450 | A push to production migrates and deploys, in that order | R21.x | Resolved |
 | HRT-451 | Two indexes on addresses were the same index twice | R24.12 | Resolved |
 | HRT-452 | Finishing required two-step lands in the church, not on the front page | R1.8, R22.3 | Resolved |
+| HRT-453 | The portal's Security screen was reachable only by typing its address | R21.x | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |
