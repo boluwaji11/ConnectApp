@@ -100,6 +100,15 @@ jobs:
             project: ${{ vars.VERCEL_PROJECT_ID_ADMIN }}
     steps:
       - uses: actions/checkout@v4
+      # The Vercel build runs this repository's own build, which is a pnpm
+      # workspace, so the runner needs pnpm and node on the path before the
+      # CLI tries to spawn them. Without this the build fails on
+      # `spawn pnpm ENOENT` after the migrations have already been applied.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
       - name: Deploy ${{ matrix.app }}
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
