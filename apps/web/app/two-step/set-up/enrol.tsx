@@ -24,7 +24,8 @@ export function Enrol({
   next,
   alreadyOn,
 }: {
-  next?: string;
+  /** Where finishing goes. Always set: the page works it out. */
+  next: string;
   /** True on a fresh visit by somebody who is already set up. */
   alreadyOn?: boolean;
 }) {
@@ -85,7 +86,7 @@ export function Enrol({
       {alreadyOn && stage.at === "off" ? (
         <div className="flex flex-col gap-4">
           <Banner tone="success">{t("twoStep.done")}</Banner>
-          <Button type="button" full onClick={() => window.location.assign(next || "/")}>
+          <Button type="button" full onClick={() => window.location.assign(next)}>
             {t("twoStep.required.continue")}
           </Button>
         </div>
@@ -196,7 +197,7 @@ export function Enrol({
             type="button"
             full
             disabled={!said}
-            onClick={() => window.location.assign(next || "/")}
+            onClick={() => window.location.assign(next)}
           >
             <Check /> {t("twoStep.required.continue")}
           </Button>

@@ -8,6 +8,8 @@
  * a real account because one request had failed. These cases are that bug.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const listFactors = vi.fn();
 const unenroll = vi.fn<(p: { factorId: string }) => Promise<{ error: { message: string } | null }>>();
@@ -186,5 +188,42 @@ describe("turning two-step off", () => {
 
     expect(await redeemRecoveryCode("u1", "abcde-fghij")).toEqual({});
     expect(markTwoStepOff).toHaveBeenCalledWith("u1");
+  });
+});
+
+describe("where required set-up finishes", () => {
+  /*
+   * HRT-452. The address carries `next` when a gate sent somebody here from a
+   * screen they were trying to reach, and carries nothing when setting up a
+   * church walked them through it. That second case fell back to `/`, which
+   * on our own name is the marketing page: a church owner finished securing
+   * their account and was shown the front door of the product they had just
+   * signed up for.
+   *
+   * Asserted on the source because the alternative is a browser walk through
+   * enrolment with a real factor, which the suite that does that skips in CI.
+   */
+  const page = readFileSync(
+    resolve(__dirname, "..", "app/two-step/set-up/page.tsx"),
+    "utf8",
+  );
+  const enrol = readFileSync(
+    resolve(__dirname, "..", "app/two-step/set-up/enrol.tsx"),
+    "utf8",
+  );
+
+  it("falls back to where signing in would land, not to the front page", () => {
+    expect(page).toContain("landingFor(user.id)");
+  });
+
+  it("leaves the screen nothing to fall back to on its own", () => {
+    /* The page always works one out, so the client cannot quietly reintroduce
+       a default of its own. */
+    expect(enrol).not.toContain('next || "/"');
+    expect(enrol).toContain("next: string;");
+  });
+
+  it("still honours a next the gate put in the address", () => {
+    expect(page).toContain('safePath(params.next ?? "")');
   });
 });

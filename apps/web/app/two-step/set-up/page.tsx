@@ -4,6 +4,7 @@ import { t } from "@connectapp/i18n";
 import { twoStepFor } from "@connectapp/db";
 import { currentUser } from "@/lib/session";
 import { safePath } from "@/lib/safe-redirect";
+import { landingFor } from "@/lib/landing";
 import { AuthShell } from "../../auth-shell";
 import { publicTab } from "@/lib/page-metadata";
 import { Enrol } from "./enrol";
@@ -35,7 +36,20 @@ export default async function RequiredTwoStep({
   if (!user) redirect("/sign-in");
 
   const params = await searchParams;
-  const next = safePath(params.next ?? "") ?? undefined;
+  /*
+   * HRT-452. Where "Finish" goes when nothing said where to go.
+   *
+   * The address carries `next` when a gate sent somebody here from a screen
+   * they were trying to reach, and carries nothing when setting up a church
+   * walked them through it. That second case fell back to `/`, which on our
+   * own name is the marketing page: a church owner finished securing their
+   * account and was shown the front door of the product they had just signed
+   * up for.
+   *
+   * `landingFor` is the same answer signing in gives, which includes sending
+   * them to their own church's address rather than ours.
+   */
+  const next = safePath(params.next ?? "") ?? (await landingFor(user.id));
 
   /*
    * HRT-438. Not sent away once enrolled, deliberately.
