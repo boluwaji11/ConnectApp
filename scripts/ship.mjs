@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 /**
- * HRT-440. Everything production needs, checked before anything moves.
+ * HRT-440, HRT-450. A look at production before anything moves.
  *
- * Moving a change to production is three things in a fixed order: the
- * database first, because a column has to exist before the code that selects
- * it is live, then the environment, because a variable that is not there is a
- * screen that throws, then the code. Done by hand it is three commands in
- * three places and the order is remembered rather than enforced.
+ * This used to apply the migrations itself and then push. It does not any
+ * more: `.github/workflows/deploy.yml` runs on a push to `production` and
+ * does the database first and the deployment second, so a merge is the whole
+ * of deploying and nothing depends on anybody running a script.
  *
- *   node scripts/ship.mjs          what it would do, and nothing else
- *   node scripts/ship.mjs --go     the same, and then do it
+ * What is left is the looking, which is still worth doing before a release
+ * rather than after one:
  *
- * It reads production to answer the questions and writes nothing without
- * `--go`. Every check that fails stops `--go` outright; a warning does not.
+ *   node scripts/ship.mjs          what production is missing, and nothing else
+ *   node scripts/ship.mjs --go     the same, then move the branch
+ *
+ * `--go` is a convenience for pushing from here. Merging `main` into
+ * `production` on GitHub does exactly the same thing.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -190,11 +192,19 @@ if (said.trim() !== head) {
   process.exit(1);
 }
 
-if (count > 0) {
-  console.log(`\nApplying ${count} migration(s) to production...`);
-  console.log(run("pnpm", ["--filter", "@connectapp/db", "migrate"], { CONNECTAPP_ENV: "production" }));
-}
-
+/*
+ * HRT-450. The migrations are not applied here.
+ *
+ * The deploy workflow applies them on the push below, before it deploys
+ * anything, which is the only ordering that cannot be raced. Doing it here as
+ * well would run them twice and would put the one place that decides the
+ * order back into a script somebody has to remember.
+ */
 console.log("\nMoving production forward...");
 console.log(run("git", ["push", "--force-with-lease", "origin", "main:production"]));
-console.log("\nDone. Vercel is building. Watch it with: vercel ls connectapp --prod");
+console.log(
+  count > 0
+    ? `\nDone. The deploy workflow is applying ${count} migration(s), then deploying.`
+    : "\nDone. The deploy workflow is deploying.",
+);
+console.log("Watch it with: gh run watch");

@@ -11,6 +11,7 @@ import { owner, closeConnections } from "../src/client";
 import * as platform from "../src/repo/platform";
 import { hasAuthSchema } from "./helpers/auth-schema";
 import { markTwoStepOn, issueRecoveryCodes, twoStepFor } from "../src/repo/two-step";
+import { withAuditTriggersOff } from "../src/maintenance";
 
 const OPERATOR = "eeeeeeee-1111-4111-8111-111111111111";
 const LOCKED = "eeeeeeee-2222-4222-8222-222222222222";
@@ -61,7 +62,11 @@ beforeAll(async () => {
 afterAll(async () => {
   const ids = [OPERATOR, LOCKED, OTHER, OUTSIDER];
   await owner()`delete from platform_admins where user_id = ${OPERATOR}`;
-  await owner()`delete from platform_events where actor_id = ${OPERATOR}`;
+  /* HRT-435. Append only, so the clear-up goes through the maintenance
+     escape rather than straight at the table. */
+  await withAuditTriggersOff(async (sql) => {
+    await sql`delete from platform_events where actor_id = ${OPERATOR}`;
+  });
   await owner()`delete from app_users where id in ${owner()(ids)}`;
   if (auth) await owner()`delete from auth.users where id in ${owner()(ids)}`;
   await closeConnections();

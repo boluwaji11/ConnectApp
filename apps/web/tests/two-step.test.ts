@@ -118,13 +118,19 @@ describe("a factor list that was read", () => {
     expect((await factors()).held).toHaveLength(2);
   });
 
-  it("names a passkey as well as an app", async () => {
+  it("still sees a key left behind by the passkeys that were offered once", async () => {
+    /*
+     * Nothing offers one any more, and an account that enrolled one while it
+     * was offered still holds it. A factor this file cannot see is a factor
+     * nobody can turn off, which is the bug `data.all` was fixed for.
+     */
     listFactors.mockResolvedValue({
       data: { all: [{ id: "p1", status: "verified", factor_type: "webauthn" }], totp: [] },
       error: null,
     });
-    const { presentable } = await load();
-    expect(await presentable()).toEqual({ known: true, totp: null, passkey: "p1" });
+    const { factors, presentableFactor } = await load();
+    expect((await factors()).held).toEqual([{ id: "p1", kind: "webauthn", verified: true }]);
+    expect(await presentableFactor()).toBe("p1");
   });
 
   it("says there is nothing when the list really is empty", async () => {

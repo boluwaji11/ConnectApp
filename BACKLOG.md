@@ -1134,7 +1134,7 @@ of money and after everything else.
 | HRT-429 | A picker is a read of the directory, so it asks the same permission | R3.2, R3.4, R21.2 | Resolved |
 | HRT-430 | Secrets out of the audit log, a recorded read, and a child called an adult | R1.11, R6.2, R3.4 | Resolved |
 | HRT-431 | A limit on what an unauthenticated caller can make us do | R21.5, R13.2 | Resolved |
-| HRT-432 | drizzle-orm to 0.45.x, behind the isolation suite | R21.1 | Open |
+| HRT-432 | drizzle-orm to 0.45.x, behind the isolation suite | R21.1 | Active |
 | HRT-433 | The development gate applies to the demo host too | R21.3, R19.7 | Resolved |
 | HRT-434 | What an operator read, not only what they changed | R1.11, R21.3 | Resolved |
 | HRT-435 | Append-only enforced in the database, not by the absence of a writer | R1.11, R8.x | Resolved |
@@ -1145,13 +1145,14 @@ of money and after everything else.
 | HRT-440 | One command to deploy: migrations, environment drift, then the push | R21.x | Resolved |
 | HRT-441 | An owner who loses their phone can be let back in, by an operator | R1.8, R21.4 | Resolved |
 | HRT-442 | A fresh factor for the actions that move money, reach or data | R1.8, R21.4 | Resolved |
-| HRT-443 | Passkeys turned on: the Supabase setting, then PASSKEYS_ENABLED | R1.8 | Open |
+| HRT-443 | Passkeys taken out: Supabase caps ceremony origins at five | R1.8 | Resolved |
 | HRT-444 | The church's own record is refused, not merely hidden from the menu | R1.1, R21.2 | Resolved |
 | HRT-445 | A seeded account gets the record the member screens read | R3.x, R17.4 | Resolved |
 | HRT-446 | Pastoral can write a note, which is most of what pastoral does | R2.7, R6.2 | Resolved |
 | HRT-447 | The record panel reads as four transactions, not eighteen round trips | R24.11, R24.12 | Resolved |
 | HRT-448 | Every screen pays a round trip per read, because nothing pipelines | R24.11, R24.12 | Open |
 | HRT-449 | The settings menu sticks under the environment bar, not behind it | R24.6 | Resolved |
+| HRT-450 | A push to production migrates and deploys, in that order | R21.x | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |

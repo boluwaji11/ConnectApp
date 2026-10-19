@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { owner, closeConnections } from "../src/client";
 import * as platform from "../src/repo/platform";
 import { testTenant, dropTenants } from "./helpers/tenant";
+import { withAuditTriggersOff } from "../src/maintenance";
 
 /**
  * HRT-434, R1.11, R21.3. What an operator read, not only what they changed.
@@ -42,13 +43,14 @@ beforeAll(async () => {
     values (${operatorId}, 'Reads Probe')
     on conflict (user_id) do update set revoked_at = null`;
 
-  await owner()`delete from platform_events where actor_id = ${operatorId}`;
+  await withAuditTriggersOff(async (sql) => {
+    await sql`delete from platform_events where actor_id = ${operatorId}`;
+  });
 });
 
 afterAll(async () => {
-  await owner().begin(async (tx) => {
-    await tx`select set_config('app.purge', '1', true)`;
-    await tx`delete from platform_events where actor_id = ${operatorId}`;
+  await withAuditTriggersOff(async (sql) => {
+    await sql`delete from platform_events where actor_id = ${operatorId}`;
   });
   await owner()`delete from platform_admins where user_id = ${operatorId}`;
   await owner()`delete from app_users where id = ${operatorId}`;

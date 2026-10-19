@@ -4,6 +4,9 @@ on:
   push:
     branches: [main, production]
   pull_request:
+  # HRT-450. Called by the deploy workflow, so a deployment runs the same
+  # checks as a push rather than a copy of them that has drifted.
+  workflow_call:
 
 # A second push to the same branch cancels the first. Nobody reads a run that is
 # already out of date, and the minutes are not free.
