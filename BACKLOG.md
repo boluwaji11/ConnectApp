@@ -119,7 +119,7 @@ Internal only. No church touches this. Exit criteria in [ROADMAP.md](ROADMAP.md)
 | HRT-363 | Settings closes the area column, the way Overview already does | R24.14 | Resolved |
 | HRT-364 | The pager says which page you are on, and which ones there are | R2.14, R24.6 | Resolved |
 | HRT-366 | The screen's name goes back across the top, where it was | R24.6, R24.11 | Resolved |
-| HRT-365 | Five screens cannot navigate to themselves, so their paging and filters do nothing | R24.12, R13.21 | New |
+| HRT-365 | Five screens cannot navigate to themselves, so their paging and filters do nothing | R24.12, R13.21 | Deferred. The premise was wrong and the cause is not ours. See the note below |
 | HRT-297 | Collect production Core Web Vitals in Vercel Speed Insights | N3 | Closed |
 | HRT-299 | Compare font systems in the design gallery without changing app fonts | R24.6 | Closed |
 | HRT-300 | Set IBM Plex as the platform type system across web, admin and design tokens | R24.7 | Closed |
@@ -2196,32 +2196,29 @@ same job, and the two disagreed about what to draw. Both take the row from one p
 `pageTokens` in the design system, under test: seven slots at most, the first and the last always
 there, the current one and its neighbours, and a gap where a run is left out.
 
-### HRT-365, how to test it
+### HRT-365, deferred 19 October 2026
 
-**Found while testing HRT-364, and not caused by it.** On five screens, a navigation from the screen
-to itself with different parameters does nothing at all: the address does not change and the rows do
-not move. Paging the gifts, narrowing the giving report, and anything else that keeps its state in
-the address is dead on those screens until the page is reloaded.
+**The premise was wrong.** The press is not dropped. It arrives late, by 10 to 25
+seconds, on roughly one press in three, and a reader who has moved on reads that as
+a dead button.
 
-To see it: open `/giving?gifts=2`, press 3 in the pager, and watch the address stay where it is.
-Then open `/giving?gifts=3` directly and confirm the page itself is right, which it is: the server
-answers correctly, and the client router drops the navigation.
+Measured against a build, in both a headless and a visible browser:
 
-Measured with the router directly, pushing a route to itself with a parameter:
+- The RSC answer for the new address arrives in about 60ms, so the data is in hand.
+- The screen then changes at the moment some unrelated state update lands. The
+  clearest flusher is the inbox poll in `components/inbox/data.ts`, which runs every
+  25 seconds, and the stalls accordingly measured 9s, 14s, 19s and 24s and never
+  longer.
+- The browser is not blocked: around 1,400 frames are drawn during a 23 second
+  stall.
+- `next dev` does not reproduce it at all, so it needs a build.
+- Ruled out by rebuilding with each turned off and re-measuring: `viewTransition`,
+  `dynamicOnHover`, and `staleTimes`.
 
-| screen | what happens |
-|---|---|
-| Giving, Reports, the giving report, Check-in, Calendar | the push is dropped |
-| People, Groups, Events, Forms, Services, Schedule, Follow-ups, Messages, Website, Campaigns, Statements, Duplicates, Settings | it navigates |
-
-What is known: the RSC request goes out and answers 200, no history entry is written, nothing is
-logged, and no redirect is involved. Pushing to a different screen works from the same page, and
-pushing back into the stuck screen from elsewhere works. It is the same before every change in this
-release, so it is older than them.
-
-What is not known: what the five have in common. They do not share `useSearchParams`, a metadata
-shape, a table, or a chart. The next step is to bisect one of them by taking its children out one at
-a time, which is a story of its own rather than a line in another one.
+**Why it is set down.** What is left points at Next 15.5's own router scheduling
+rather than at anything in this repository, and each further hypothesis costs a full
+build to test. The next move, if it is picked up again, is to check the Next issue
+tracker against this signature and try a version bump before investigating further.
 
 ### HRT-362, how to test it
 
