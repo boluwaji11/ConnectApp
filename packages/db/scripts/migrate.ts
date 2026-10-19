@@ -21,7 +21,50 @@ async function main() {
   const migrationsFolder = join(root, "migrations");
   const files = readdirSync(migrationsFolder).filter((f) => f.endsWith(".sql"));
   console.log(`Applying ${files.length} table migration(s) from migrations/`);
+
+  /*
+   * HRT-455. Whether anything actually changed, so the rest can be skipped.
+   *
+   * `search.sql` and `security.sql` describe the shape the database should be
+   * in: indexes, roles, RLS, grants and audit triggers. They are idempotent in
+   * their result and expensive in their cost, because altering a table,
+   * rewriting a policy, rebuilding a trigger and granting on a table each want
+   * an ACCESS EXCLUSIVE lock on it.
+   *
+   * Running them on a deployment that changed no schema is asking a live
+   * database for a hundred exclusive locks to arrive back where it started,
+   * and it is what made three production deployments fail: a demo visitor
+   * held an ordinary read on `tenants`, and the deployment could not get in.
+   *
+   * So they run when a migration ran, which is when the schema can have moved
+   * underneath them, and not otherwise. `--all` runs them regardless, for
+   * putting a database right by hand.
+   */
+  const applied = async () => {
+    const rows = await sql<{ n: string }[]>`
+      select count(*)::text as n from drizzle.__drizzle_migrations`.catch(() => [{ n: "0" }]);
+    return Number(rows[0]?.n ?? 0);
+  };
+
+  const before = await applied();
   await migrate(db, { migrationsFolder });
+  const after = await applied();
+
+  const changed = after > before;
+  const forced = process.argv.includes("--all");
+
+  if (!changed && !forced) {
+    console.log(
+      `\nNo migration ran, so the schema is where sql/search.sql and`
+      + ` sql/security.sql last left it.`,
+    );
+    console.log("Skipping both. To apply them anyway:  pnpm db:migrate --all");
+    await report(sql);
+    await closeConnections();
+    return;
+  }
+
+  if (changed) console.log(`  ${after - before} new migration(s) applied.`);
 
   console.log("Applying sql/search.sql (trigram indexes behind the search box)");
   await sql.unsafe(readFileSync(join(root, "sql", "search.sql"), "utf8"));
@@ -77,6 +120,17 @@ async function main() {
     }
   }
 
+  await report(sql);
+  await closeConnections();
+}
+
+/**
+ * What the database is carrying, printed whether or not anything ran.
+ *
+ * A deployment that skipped the security layer still has to say what the
+ * security layer amounts to, or "skipped" reads as "unknown".
+ */
+async function report(sql: ReturnType<typeof owner>): Promise<void> {
   const policyRows = await sql<{ count: string }[]>`
     select count(*)::text as count from pg_policies where schemaname = 'public'`;
   const tableRows = await sql<{ count: string }[]>`
@@ -91,7 +145,6 @@ async function main() {
   const triggers = triggerRows[0]?.count ?? "0";
 
   console.log(`\nDone. ${tables} tables with RLS enabled, ${policies} policies, ${triggers} audit triggers.`);
-  await closeConnections();
 }
 
 main().catch(async (err) => {

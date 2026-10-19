@@ -402,3 +402,28 @@ vercel deploy                       # from the repository root
 vercel alias <the new url> dev.connectapp.church
 vercel alias <the new url> '*.dev.connectapp.church'
 ```
+
+## The security layer runs when the schema moves, not on every deploy
+
+HRT-455. `sql/search.sql` and `sql/security.sql` describe the shape the
+database should be in: indexes, roles, RLS, grants and audit triggers. They are
+idempotent in their result and expensive in their cost, because altering a
+table, rewriting a policy, rebuilding a trigger and granting on a table each
+want an ACCESS EXCLUSIVE lock on it.
+
+Running them on a deployment that changed no schema asks a live database for a
+hundred exclusive locks to arrive back where it started. Three production
+deployments failed that way: a demo visitor held an ordinary read on `tenants`
+for a few minutes, and the deployment could not get in. A lock request that
+waits is worse than slow, because every later reader of that table queues
+behind it.
+
+So `pnpm db:migrate` runs them when a migration ran and not otherwise, and
+says which it did. `pnpm db:migrate --all` runs them regardless, which is what
+to use when putting a database right by hand or after editing either file
+without a migration beside it.
+
+The guards inside `security.sql` stay: each statement asks the catalogue
+before it takes a lock, so even the run after a migration touches only what
+genuinely changed. `migrate.ts` sets `lock_timeout` to two seconds and retries,
+so a busy table is given up rather than queued for.
