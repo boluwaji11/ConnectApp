@@ -163,3 +163,51 @@ export function approvedMessage(input: {
     }),
   };
 }
+
+/**
+ * HRT-464, R1.1, R22.1. The word to whoever operates the platform that a
+ * church is sitting in the queue.
+ *
+ * A church is provisional from the moment it is created: capped at the member
+ * limit, no invitations, no join link. Nothing lifts that but a person opening
+ * the portal and approving it, and until now nothing said a church was
+ * waiting. The first a church heard back depended on somebody happening to
+ * look.
+ *
+ * It goes to the operator rather than to the church, so it carries no
+ * unsubscribe: it is not a mailing list, it is the platform telling its own
+ * operator that work has arrived. It says what is held back while the church
+ * waits, because that is what makes it worth opening now rather than later.
+ */
+export function newChurchMessage(input: {
+  to: string;
+  church: string;
+  slug: string;
+  who: string | null;
+  email: string | null;
+  place: string | null;
+  portal: string;
+}): Omit<Message, "from"> {
+  const open = `${input.portal}/churches`;
+  const who = input.who?.trim() || input.email || t("mail.greetingPlain");
+
+  const lines = [
+    t("mail.newChurch.opening", { church: input.church }),
+    input.email ? t("mail.newChurch.who", { who, email: input.email }) : null,
+    input.place ? t("mail.newChurch.where", { place: input.place, slug: input.slug }) : null,
+    t("mail.newChurch.held", { count: String(PROVISIONAL_PEOPLE) }),
+  ].filter((one): one is string => one !== null);
+
+  return {
+    to: input.to,
+    subject: t("mail.newChurch.subject", { church: input.church }),
+    replyTo: SUPPORT,
+    text: [...lines, "", `${t("mail.newChurch.button")}: ${open}`].join("\n"),
+    html: shell({
+      headline: t("mail.newChurch.headline"),
+      body: lines.map((one, at) => (at === lines.length - 1 ? aside(one) : line(one))).join("")
+        + button(t("mail.newChurch.button"), open),
+      foot: safe(t("mail.newChurch.because")),
+    }),
+  };
+}

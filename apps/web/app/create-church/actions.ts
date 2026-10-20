@@ -1,11 +1,12 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { createChurch } from "@connectapp/db";
 import { explain } from "@/lib/explain";
 import { currentUser, emailIsVerified } from "@/lib/session";
 import { rememberChurch } from "@/lib/church-choice";
-import { welcomeMessage, sendAsPlatform } from "@connectapp/mail";
+import { welcomeMessage, newChurchMessage, sendAsPlatform } from "@connectapp/mail";
 
 export interface CreateResult {
   error?: string;
@@ -79,6 +80,37 @@ export async function createChurchAccount(data: FormData): Promise<CreateResult>
       }),
     );
     if (!sent.ok && sent.connected) console.error("[welcome] not sent", sent.said);
+  }
+
+  /*
+   * HRT-464, R1.1. Whoever operates the platform is told a church is waiting.
+   *
+   * A church is provisional until a person approves it, and nothing said one
+   * had arrived: the first a church heard back depended on somebody happening
+   * to open the portal. This is that somebody being told.
+   *
+   * After the response rather than before it. The church is through the form
+   * and is not waiting on our mail; `after` runs once the redirect has been
+   * sent, so a provider having a bad minute costs a notice and not a sign-up.
+   */
+  const notice = process.env["OPERATOR_NOTICE_EMAIL"];
+  if (notice) {
+    /* The portal's own address, which the redirect allow-list already holds. */
+    const portal = process.env["PLATFORM_ADMIN_SITE"] ?? "https://admin.connectapp.church";
+    after(async () => {
+      const sent = await sendAsPlatform(
+        newChurchMessage({
+          to: notice,
+          church: name.trim(),
+          slug,
+          who: user.fullName,
+          email: user.email,
+          place: country,
+          portal,
+        }),
+      );
+      if (!sent.ok && sent.connected) console.error("[new church] notice not sent", sent.said);
+    });
   }
 
   /*

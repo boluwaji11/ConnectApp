@@ -1164,6 +1164,7 @@ of money and after everything else.
 | HRT-461 | The faces are in the repository, so no build waits on Google | R21.x, R24.6 | Resolved |
 | HRT-462 | The demo opens on a church that is already standing | R19.7, R22.1 | Resolved |
 | HRT-463 | The status screen hung on a pool of four, and took the portal's own answer with it | R21.6, N3 | Resolved |
+| HRT-464 | A church waiting for approval says so, by email | R1.1, R22.1 | Resolved |
 | HRT-370 | The invitation reaches the person it names | R1.7, R16.4, R22.1 | Resolved |
 | HRT-371 | A church can give a role on its first day, and only one it holds | R1.4, R1.6, R1.7 | Resolved |
 | HRT-372 | An invitation is ConnectApp's own mail, so it sends on day one | R16.4, R22.1 | Resolved |
@@ -2196,6 +2197,30 @@ The directory and the composer already drew numbers, through a different control
 same job, and the two disagreed about what to draw. Both take the row from one place now, which is
 `pageTokens` in the design system, under test: seven slots at most, the first and the last always
 there, the current one and its neighbours, and a gap where a run is left out.
+
+### HRT-464, how to test it
+
+A church is provisional from the moment it signs up: capped at twenty-five
+members, no invitations, no join link. Only a person opening the portal lifts
+that, and nothing said a church was waiting, so how soon a church heard back
+depended on somebody happening to look.
+
+Signing up now sends one message to `OPERATOR_NOTICE_EMAIL`, naming the church,
+who registered it, where it registered from, the address it will live at, and
+what is held back while it waits, with a button into the portal's church list.
+
+It goes after the response rather than before it, through Next's `after`, so a
+provider having a bad minute costs the notice and never the sign-up. With the
+variable unset nothing is sent and nothing else changes, which is what a laptop
+and the development deployment both do.
+
+1. Sign up a new church at `connectapp.church`.
+2. The church lands on its dashboard at the usual speed. Nothing about the form
+   waits on the mail.
+3. `bolu@connectapp.church` has a message titled "<church> is waiting for
+   approval". Press **Open it in the portal** and it lands on the church list.
+4. Approve it there. The church gets the approval message it already got before
+   this story.
 
 ### HRT-463, how to test it
 
