@@ -90,3 +90,6 @@ email-previews/
 # was sent, which is correspondence rather than code and does not belong in a
 # public repository.
 scripts/outreach/
+
+# Personal permission rules, not shared
+.claude/settings.local.json
