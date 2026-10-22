@@ -187,6 +187,8 @@ export function newChurchMessage(input: {
   email: string | null;
   place: string | null;
   portal: string;
+  /** Any further operator mailboxes the same notice should appear in. */
+  cc?: string[];
 }): Omit<Message, "from"> {
   const open = `${input.portal}/churches`;
   const who = input.who?.trim() || input.email || t("mail.greetingPlain");
@@ -200,6 +202,7 @@ export function newChurchMessage(input: {
 
   return {
     to: input.to,
+    ...(input.cc?.length ? { cc: input.cc } : {}),
     subject: t("mail.newChurch.subject", { church: input.church }),
     replyTo: SUPPORT,
     text: [...lines, "", `${t("mail.newChurch.button")}: ${open}`].join("\n"),

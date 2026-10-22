@@ -93,7 +93,14 @@ export async function createChurchAccount(data: FormData): Promise<CreateResult>
    * and is not waiting on our mail; `after` runs once the redirect has been
    * sent, so a provider having a bad minute costs a notice and not a sign-up.
    */
-  const notice = process.env["OPERATOR_NOTICE_EMAIL"];
+  /* One address or several, separated by commas. The first is the message's
+     recipient and the rest are copied, so an operator who reads two mailboxes
+     gets the notice wherever they happen to be looking. */
+  const notices = (process.env["OPERATOR_NOTICE_EMAIL"] ?? "")
+    .split(",")
+    .map((one) => one.trim())
+    .filter(Boolean);
+  const [notice, ...also] = notices;
   if (notice) {
     /* The portal's own address, which the redirect allow-list already holds. */
     const portal = process.env["PLATFORM_ADMIN_SITE"] ?? "https://admin.connectapp.church";
@@ -107,6 +114,7 @@ export async function createChurchAccount(data: FormData): Promise<CreateResult>
           email: user.email,
           place: country,
           portal,
+          cc: also,
         }),
       );
       if (!sent.ok && sent.connected) console.error("[new church] notice not sent", sent.said);

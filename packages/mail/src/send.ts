@@ -44,6 +44,7 @@ export async function sendAsPlatform(message: Omit<Message, "from">): Promise<Se
         text: message.text,
         ...(message.html ? { html: message.html } : {}),
         ...(message.replyTo ? { reply_to: message.replyTo } : {}),
+        ...(message.cc?.length ? { cc: message.cc } : {}),
       }),
       signal: AbortSignal.timeout(PATIENCE),
       cache: "no-store",
